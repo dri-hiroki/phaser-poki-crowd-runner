@@ -1,74 +1,51 @@
 /**
  * main.ts
- * Phaser game bootstrap.
- * - Registers the PokiPlugin with scene keys that match exactly
- * - Declares all scenes in the correct startup order
- * - ScaleManager.getPhaserScaleConfig() sets responsive portrait scaling
+ * PixiJS game bootstrap.
  */
 
-import Phaser from 'phaser'
-import { PokiPlugin } from '@poki/phaser-3'
+import * as PIXI from 'pixi.js'
 
-import { BootScene } from './scenes/BootScene'
-import { PreloadScene } from './scenes/PreloadScene'
-import { MenuScene } from './scenes/MenuScene'
-import { GameScene } from './scenes/GameScene'
-import { ResultScene } from './scenes/ResultScene'
+import { ScreenManager } from './core/ScreenManager'
+import { BootScreen } from './screens/BootScreen'
+import { PreloadScreen } from './screens/PreloadScreen'
+import { MenuScreen } from './screens/MenuScreen'
+import { GameScreen } from './screens/GameScreen'
+import { ResultScreen } from './screens/ResultScreen'
 import { ScaleManager } from './core/ScaleManager'
 import { GAME_CONFIG } from './data/gameConfig'
 
-const config: Phaser.Types.Core.GameConfig = {
-  type: Phaser.AUTO,
+async function init() {
+  const app = new PIXI.Application()
+  await app.init({
+    width: GAME_CONFIG.width,
+    height: GAME_CONFIG.height,
+    backgroundColor: GAME_CONFIG.backgroundColor,
+    antialias: false,
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true
+  })
 
-  // ScaleManager provides the full scale config block
-  scale: ScaleManager.getPhaserScaleConfig(),
-
-  backgroundColor: GAME_CONFIG.backgroundColor,
-
-  physics: {
-    default: 'arcade',
-    arcade: {
-      gravity: { x: 0, y: 0 },
-      debug: GAME_CONFIG.debug
-    }
-  },
-
-  // ── Poki Plugin ────────────────────────────────────────────────────────────
-  // Scene keys MUST match the keys used in the scene constructors above.
-  // The plugin handles:
-  //   • gameLoadingFinished  — auto-fired when PreloadScene finishes loading
-  //   • gameplayStart        — auto-fired when GameScene starts
-  //   • gameplayStop         — auto-fired when GameScene stops
-  //   • Input/audio muting   — during ad breaks
-  plugins: {
-    global: [
-      {
-        plugin: PokiPlugin,
-        key: 'poki',
-        start: true,
-        data: {
-          loadingSceneKey: 'PreloadScene',
-          gameplaySceneKey: 'GameScene',
-          autoCommercialBreak: true
-        }
-      }
-    ]
-  },
-
-  scene: [BootScene, PreloadScene, MenuScene, GameScene, ResultScene],
-
-  // Performance hints
-  render: {
-    antialias: false,     // Pixel-perfect, better perf on mobile
-    pixelArt: false,
-    roundPixels: true
-  },
-
-  fps: {
-    target: GAME_CONFIG.targetFps,
-    forceSetTimeOut: false
+  const container = document.getElementById('game-container')
+  if (container) {
+    container.appendChild(app.canvas)
   }
+
+  const screenManager = new ScreenManager(app)
+  screenManager.register('BootScreen', new BootScreen(screenManager))
+  screenManager.register('PreloadScreen', new PreloadScreen(screenManager))
+  screenManager.register('MenuScreen', new MenuScreen(screenManager))
+  screenManager.register('GameScreen', new GameScreen(screenManager))
+  screenManager.register('ResultScreen', new ResultScreen(screenManager))
+
+  app.ticker.add(() => {
+    screenManager.update(app.ticker.deltaMS)
+  })
+
+  // Start ScaleManager and link to ScreenManager
+  ScaleManager.init(app.canvas, screenManager)
+
+  // Start with BootScreen
+  screenManager.goTo('BootScreen')
 }
 
-// Boot the game
-new Phaser.Game(config)
+init()

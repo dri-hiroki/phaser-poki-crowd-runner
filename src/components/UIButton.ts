@@ -1,40 +1,29 @@
 /**
  * UIButton.ts
- * Reusable Phaser button component.
- * - Hover, press, and disabled visual states
- * - Minimum 44×44px touch target (WCAG / Apple HIG)
- * - Built entirely with Phaser Graphics and Text — no DOM
- * - Emits 'click' event on pointer-up activation
+ * Reusable PixiJS button component.
  */
 
+import * as PIXI from 'pixi.js'
+
 export interface UIButtonConfig {
-  scene: Phaser.Scene
   x: number
   y: number
   width?: number
   height?: number
   label: string
   fontSize?: number
-  /** Normal background color as hex number, e.g. 0x4a90d9 */
   color?: number
-  /** Hover background color */
   hoverColor?: number
-  /** Pressed background color */
   pressColor?: number
-  /** Disabled background color */
   disabledColor?: number
-  /** Text color as CSS string */
   textColor?: string
-  /** Corner radius for rounded rectangle */
   radius?: number
-  /** Called when the button is clicked/tapped */
   onClick?: () => void
 }
 
-export class UIButton extends Phaser.GameObjects.Container {
-  private bg: Phaser.GameObjects.Graphics
-  private labelText: Phaser.GameObjects.Text
-  private hitArea: Phaser.GameObjects.Rectangle
+export class UIButton extends PIXI.Container {
+  private bg: PIXI.Graphics
+  private labelText: PIXI.Text
 
   private readonly btnWidth: number
   private readonly btnHeight: number
@@ -49,8 +38,10 @@ export class UIButton extends Phaser.GameObjects.Container {
   private _pressed: boolean = false
 
   constructor(cfg: UIButtonConfig) {
-    super(cfg.scene, cfg.x, cfg.y)
+    super()
 
+    this.x = cfg.x
+    this.y = cfg.y
     this.btnWidth = Math.max(cfg.width ?? 200, 44)
     this.btnHeight = Math.max(cfg.height ?? 56, 44)
     this.colorNormal = cfg.color ?? 0x4a90d9
@@ -60,56 +51,63 @@ export class UIButton extends Phaser.GameObjects.Container {
     this.btnRadius = cfg.radius ?? 12
 
     // ── Background ──────────────────────────────────────────────────────────
-    this.bg = cfg.scene.add.graphics()
+    this.bg = new PIXI.Graphics()
     this.drawBg(this.colorNormal)
+    this.addChild(this.bg)
 
     // ── Label ───────────────────────────────────────────────────────────────
-    this.labelText = cfg.scene.add.text(0, 0, cfg.label, {
-      fontSize: `${cfg.fontSize ?? 22}px`,
+    const style = new PIXI.TextStyle({
+      fontSize: cfg.fontSize ?? 22,
       fontFamily: 'Arial, sans-serif',
-      color: cfg.textColor ?? '#ffffff',
-      fontStyle: 'bold',
-      resolution: 2
+      fill: cfg.textColor ?? '#ffffff',
+      fontWeight: 'bold'
     })
-    this.labelText.setOrigin(0.5, 0.5)
+    this.labelText = new PIXI.Text({ text: cfg.label, style })
+    this.labelText.anchor.set(0.5, 0.5)
+    this.addChild(this.labelText)
 
-    // ── Hit Area (ensures minimum 44×44 touch target) ────────────────────────
-    const hitW = Math.max(this.btnWidth, 44)
-    const hitH = Math.max(this.btnHeight, 44)
-    this.hitArea = cfg.scene.add.rectangle(0, 0, hitW, hitH)
-    this.hitArea.setAlpha(0.001) // Invisible but present for pointer events
+    // ── Hit Area ────────────────────────────────────────────────────────
+    this.hitArea = new PIXI.Rectangle(
+      -this.btnWidth / 2,
+      -this.btnHeight / 2,
+      this.btnWidth,
+      this.btnHeight
+    )
+    
+    this.eventMode = 'static'
+    this.cursor = 'pointer'
 
-    this.add([this.bg, this.labelText, this.hitArea])
-
-    this.hitArea.setInteractive({ useHandCursor: true })
-    this.hitArea.on(Phaser.Input.Events.POINTER_OVER, this.onOver, this)
-    this.hitArea.on(Phaser.Input.Events.POINTER_OUT, this.onOut, this)
-    this.hitArea.on(Phaser.Input.Events.POINTER_DOWN, this.onDown, this)
-    this.hitArea.on(Phaser.Input.Events.POINTER_UP, this.onUp, this)
+    this.on('pointerover', this.onOver, this)
+    this.on('pointerout', this.onOut, this)
+    this.on('pointerdown', this.onDown, this)
+    this.on('pointerup', this.onUp, this)
+    this.on('pointerupoutside', this.onOut, this)
 
     if (cfg.onClick) {
       this.on('click', cfg.onClick)
+      // Pixi equivalent to click is sometimes useful for touch
+      this.on('pointertap', cfg.onClick)
     }
-
-    cfg.scene.add.existing(this)
   }
 
   // ─── Public API ────────────────────────────────────────────────────────────
 
   setText(text: string): this {
-    this.labelText.setText(text)
+    this.labelText.text = text
     return this
   }
 
   setEnabled(enabled: boolean): this {
     this._disabled = !enabled
     if (enabled) {
-      this.hitArea.setInteractive({ useHandCursor: true })
+      this.eventMode = 'static'
+      this.cursor = 'pointer'
     } else {
-      this.hitArea.disableInteractive()
+      this.eventMode = 'none'
+      this.cursor = 'default'
     }
     this.drawBg(enabled ? this.colorNormal : this.colorDisabled)
-    this.labelText.setAlpha(enabled ? 1 : 0.5)
+    this.labelText.alpha = enabled ? 1 : 0.5
     return this
   }
 
@@ -124,7 +122,7 @@ export class UIButton extends Phaser.GameObjects.Container {
     this._hovered = true
     if (!this._pressed) {
       this.drawBg(this.colorHover)
-      this.setScale(1.03)
+      this.scale.set(1.03)
     }
   }
 
@@ -133,44 +131,43 @@ export class UIButton extends Phaser.GameObjects.Container {
     this._hovered = false
     this._pressed = false
     this.drawBg(this.colorNormal)
-    this.setScale(1.0)
+    this.scale.set(1.0)
   }
 
   private onDown(): void {
     if (this._disabled) return
     this._pressed = true
     this.drawBg(this.colorPress)
-    this.setScale(0.97)
+    this.scale.set(0.97)
   }
 
   private onUp(): void {
     if (this._disabled) return
+    if (!this._pressed) return
     this._pressed = false
-    this.drawBg(this._hovered ? this.colorHover : this.colorNormal)
-    this.setScale(this._hovered ? 1.03 : 1.0)
-    this.emit('click')
+    if (this._hovered) {
+      this.drawBg(this.colorHover)
+      this.scale.set(1.03)
+    } else {
+      this.drawBg(this.colorNormal)
+      this.scale.set(1.0)
+    }
   }
 
   // ─── Drawing ──────────────────────────────────────────────────────────────
 
   private drawBg(color: number): void {
     this.bg.clear()
-    this.bg.fillStyle(color, 1)
-    this.bg.fillRoundedRect(
+    this.bg.roundRect(
       -this.btnWidth / 2,
       -this.btnHeight / 2,
       this.btnWidth,
       this.btnHeight,
       this.btnRadius
     )
+    this.bg.fill({ color, alpha: 1 })
+    
     // Subtle stroke
-    this.bg.lineStyle(2, 0xffffff, 0.15)
-    this.bg.strokeRoundedRect(
-      -this.btnWidth / 2,
-      -this.btnHeight / 2,
-      this.btnWidth,
-      this.btnHeight,
-      this.btnRadius
-    )
+    this.bg.stroke({ color: 0xffffff, alpha: 0.15, width: 2 })
   }
 }

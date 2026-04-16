@@ -1,12 +1,11 @@
 /**
  * ProgressBar.ts
- * Reusable loading/progress bar component.
- * Used in PreloadScene but can be used anywhere a progress indicator is needed.
- * Built with Phaser Graphics — no DOM.
+ * Reusable loading/progress bar component migrated to PixiJS.
  */
 
+import * as PIXI from 'pixi.js'
+
 export interface ProgressBarConfig {
-  scene: Phaser.Scene
   x: number
   y: number
   width?: number
@@ -23,9 +22,9 @@ export interface ProgressBarConfig {
   initialValue?: number
 }
 
-export class ProgressBar extends Phaser.GameObjects.Container {
-  private track: Phaser.GameObjects.Graphics
-  private fill: Phaser.GameObjects.Graphics
+export class ProgressBar extends PIXI.Container {
+  private track: PIXI.Graphics
+  private fill: PIXI.Graphics
 
   private readonly barWidth: number
   private readonly barHeight: number
@@ -37,27 +36,25 @@ export class ProgressBar extends Phaser.GameObjects.Container {
   private _value: number = 0
 
   constructor(cfg: ProgressBarConfig) {
-    super(cfg.scene, cfg.x, cfg.y)
+    super()
+    
+    this.x = cfg.x
+    this.y = cfg.y
 
     this.barWidth = cfg.width ?? 300
     this.barHeight = cfg.height ?? 20
     this.trackColor = cfg.trackColor ?? 0x333355
     this.fillColor = cfg.fillColor ?? 0x4a90d9
     this.highlightColor = cfg.highlightColor ?? 0x7ab8f5
-    this.barRadius = cfg.radius ?? Math.floor((cfg.height ?? 20) / 2)
+    this.barRadius = cfg.radius ?? Math.floor(this.barHeight / 2)
 
-    // Track (empty bar background)
-    this.track = cfg.scene.add.graphics()
+    this.track = new PIXI.Graphics()
+    this.addChild(this.track)
     this.drawTrack()
 
-    // Fill (progress portion)
-    this.fill = cfg.scene.add.graphics()
+    this.fill = new PIXI.Graphics()
+    this.addChild(this.fill)
 
-    this.add([this.track, this.fill])
-
-    cfg.scene.add.existing(this)
-
-    // Apply initial value
     this.setValue(cfg.initialValue ?? 0)
   }
 
@@ -82,24 +79,26 @@ export class ProgressBar extends Phaser.GameObjects.Container {
 
   private drawTrack(): void {
     this.track.clear()
-    // Outer border
-    this.track.lineStyle(2, 0xffffff, 0.2)
-    this.track.strokeRoundedRect(
+    
+    // Outer border (simulated with slightly larger rect)
+    this.track.roundRect(
       -this.barWidth / 2 - 1,
       -this.barHeight / 2 - 1,
       this.barWidth + 2,
       this.barHeight + 2,
       this.barRadius + 1
     )
+    this.track.stroke({ color: 0xffffff, width: 2, alpha: 0.2 })
+
     // Fill with track color
-    this.track.fillStyle(this.trackColor, 1)
-    this.track.fillRoundedRect(
+    this.track.roundRect(
       -this.barWidth / 2,
       -this.barHeight / 2,
       this.barWidth,
       this.barHeight,
       this.barRadius
     )
+    this.track.fill({ color: this.trackColor, alpha: 1 })
   }
 
   private drawFill(): void {
@@ -109,24 +108,24 @@ export class ProgressBar extends Phaser.GameObjects.Container {
     const filledWidth = Math.max(this.barRadius * 2, this.barWidth * this._value)
 
     // Main fill
-    this.fill.fillStyle(this.fillColor, 1)
-    this.fill.fillRoundedRect(
+    this.fill.roundRect(
       -this.barWidth / 2,
       -this.barHeight / 2,
       filledWidth,
       this.barHeight,
       this.barRadius
     )
+    this.fill.fill({ color: this.fillColor, alpha: 1 })
 
     // Highlight stripe (top edge)
     const highlightH = Math.max(2, Math.floor(this.barHeight * 0.25))
-    this.fill.fillStyle(this.highlightColor, 0.5)
-    this.fill.fillRoundedRect(
+    this.fill.roundRect(
       -this.barWidth / 2 + 4,
       -this.barHeight / 2 + 3,
       Math.max(0, filledWidth - 8),
       highlightH,
       highlightH / 2
     )
+    this.fill.fill({ color: this.highlightColor, alpha: 0.5 })
   }
 }

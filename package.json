@@ -9,8 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@poki/phaser-3": "^0.0.5",
-    "phaser": "^3.80.1",
+    "pixi.js": "^8.6.2",
     "typescript": "^5.4.5",
     "vite": "^5.2.11"
   }

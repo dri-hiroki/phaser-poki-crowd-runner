@@ -1,16 +1,9 @@
 /**
  * AudioManager.ts
- * Singleton audio controller.
+ * Singleton audio controller mapped to native HTML Audio.
  * - Global mute/unmute with persisted state
  * - Separate SFX and music volume controls
  * - Browser audio context unlock on first user interaction
- * - Integrates with Phaser's sound system via scene reference
- *
- * Usage:
- *   AudioManager.init(scene)   // call once in BootScene
- *   AudioManager.playSfx(scene, 'jump')
- *   AudioManager.playMusic(scene, 'bgm')
- *   AudioManager.toggleMute()
  */
 
 import { SaveManager, SAVE_KEYS } from './SaveManager'
@@ -20,15 +13,10 @@ export class AudioManager {
   private static _sfxVolume: number = 1.0
   private static _musicVolume: number = 0.6
   private static _audioUnlocked: boolean = false
-  private static _currentMusic: Phaser.Sound.BaseSound | null = null
+  private static _currentMusic: HTMLAudioElement | null = null
+  private static _cache: Record<string, HTMLAudioElement> = {}
 
-  // ─── Lifecycle ─────────────────────────────────────────────────────────────
-
-  /**
-   * Load persisted settings and wire up browser audio unlock.
-   * Call once from BootScene.create().
-   */
-  static init(_scene: Phaser.Scene): void {
+  static init(_scene: any): void {
     AudioManager._muted = SaveManager.load<boolean>(SAVE_KEYS.muted, false)
     AudioManager._sfxVolume = SaveManager.load<number>(SAVE_KEYS.sfxVolume, 1.0)
     AudioManager._musicVolume = SaveManager.load<number>(SAVE_KEYS.musicVolume, 0.6)
@@ -36,51 +24,48 @@ export class AudioManager {
     AudioManager.setupAudioUnlock()
   }
 
-  // ─── Playback ──────────────────────────────────────────────────────────────
+  // Preload a sound locally
+  static registerAudio(key: string, url: string) {
+    const audio = new Audio(url)
+    audio.preload = 'auto'
+    this._cache[key] = audio
+  }
 
-  /**
-   * Play a one-shot sound effect. Safe to call even if key doesn't exist.
-   */
-  static playSfx(scene: Phaser.Scene, key: string, volume?: number): void {
+  static playSfx(_scene: any, key: string, volume?: number): void {
     if (AudioManager._muted) return
-    if (!scene.cache.audio.has(key)) return
+    const src = AudioManager._cache[key]
+    if (!src) return
 
     try {
-      scene.sound.play(key, {
-        volume: (volume ?? 1.0) * AudioManager._sfxVolume
-      })
+      const clone = src.cloneNode() as HTMLAudioElement
+      clone.volume = (volume ?? 1.0) * AudioManager._sfxVolume
+      clone.play().catch(() => {})
     } catch {
       // Audio context may not be ready yet
     }
   }
 
-  /**
-   * Play a looping background music track.
-   * Stops any currently playing music first.
-   */
-  static playMusic(scene: Phaser.Scene, key: string, volume?: number): void {
+  static playMusic(_scene: any, key: string, volume?: number): void {
     AudioManager.stopMusic()
-    if (!scene.cache.audio.has(key)) return
+    const src = AudioManager._cache[key]
+    if (!src) return
 
     try {
-      AudioManager._currentMusic = scene.sound.add(key, {
-        loop: true,
-        volume: (volume ?? 1.0) * AudioManager._musicVolume * (AudioManager._muted ? 0 : 1)
-      })
-      AudioManager._currentMusic.play()
+      AudioManager._currentMusic = src.cloneNode() as HTMLAudioElement
+      AudioManager._currentMusic.loop = true
+      AudioManager._currentMusic.volume = (volume ?? 1.0) * AudioManager._musicVolume * (AudioManager._muted ? 0 : 1)
+      AudioManager._currentMusic.play().catch(() => {})
     } catch {
       // Audio context may not be ready yet
     }
   }
 
-  /**
-   * Stop and destroy the current background music track.
-   */
   static stopMusic(): void {
     if (AudioManager._currentMusic) {
       try {
-        AudioManager._currentMusic.stop()
-        AudioManager._currentMusic.destroy()
+        AudioManager._currentMusic.pause()
+        AudioManager._currentMusic.removeAttribute('src')
+        AudioManager._currentMusic.load()
       } catch {
         // Ignore
       }
@@ -88,12 +73,6 @@ export class AudioManager {
     }
   }
 
-  // ─── Mute Control ─────────────────────────────────────────────────────────
-
-  /**
-   * Toggle global mute. Persists the new state.
-   * Returns the new muted state.
-   */
   static toggleMute(): boolean {
     AudioManager._muted = !AudioManager._muted
     SaveManager.save(SAVE_KEYS.muted, AudioManager._muted)
@@ -101,9 +80,6 @@ export class AudioManager {
     return AudioManager._muted
   }
 
-  /**
-   * Set mute state explicitly.
-   */
   static setMuted(muted: boolean): void {
     AudioManager._muted = muted
     SaveManager.save(SAVE_KEYS.muted, muted)
@@ -113,8 +89,6 @@ export class AudioManager {
   static get muted(): boolean {
     return AudioManager._muted
   }
-
-  // ─── Volume Control ────────────────────────────────────────────────────────
 
   static setSfxVolume(volume: number): void {
     AudioManager._sfxVolume = Math.max(0, Math.min(1, volume))
@@ -135,24 +109,15 @@ export class AudioManager {
     return AudioManager._musicVolume
   }
 
-  // ─── Internal ──────────────────────────────────────────────────────────────
-
   private static applyMuteState(): void {
     if (!AudioManager._currentMusic) return
     try {
-      const sound = AudioManager._currentMusic as Phaser.Sound.WebAudioSound
-      if ('setVolume' in sound) {
-        sound.setVolume(AudioManager._muted ? 0 : AudioManager._musicVolume)
-      }
+      AudioManager._currentMusic.volume = AudioManager._muted ? 0 : AudioManager._musicVolume
     } catch {
       // Ignore
     }
   }
 
-  /**
-   * Mobile browsers require a user gesture before the AudioContext can start.
-   * This adds a one-time listener to resume the context on first touch/click.
-   */
   private static setupAudioUnlock(): void {
     if (AudioManager._audioUnlocked) return
 
@@ -160,7 +125,6 @@ export class AudioManager {
       if (AudioManager._audioUnlocked) return
       AudioManager._audioUnlocked = true
 
-      // Resume any suspended AudioContext (works in all modern browsers)
       try {
         const AudioContextClass =
           window.AudioContext ??

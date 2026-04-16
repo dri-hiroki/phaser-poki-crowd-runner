@@ -1,71 +1,80 @@
 /**
  * ScaleManager.ts
- * Manages responsive canvas scaling.
+ * Manages responsive canvas scaling using CSS.
  * - Maintains 9:16 portrait aspect ratio on all screen sizes
+ * - Centers the canvas in the viewport
  * - Handles orientation change events
- * - Works with Phaser's built-in scale manager (Scale.FIT mode)
- *
- * Usage: Call ScaleManager.init() once in BootScene.
- * The Phaser config in main.ts already sets scale mode — this class
- * adds orientation-change handling and exposes helpers.
  */
 
 import { GAME_CONFIG } from '../data/gameConfig'
+import { ScreenManager } from './ScreenManager'
 
 export class ScaleManager {
   private static orientationWarning: HTMLElement | null = null
+  private static canvas: HTMLCanvasElement | null = null
+  private static screenManager: ScreenManager | null = null
 
   /**
-   * Initializes orientation change handling.
-   * Call once from BootScene.
+   * Initializes orientation change handling and canvas resize binding.
    */
-  static init(): void {
-    ScaleManager.handleOrientationChange()
+  static init(canvas: HTMLCanvasElement, screenManager: ScreenManager): void {
+    ScaleManager.canvas = canvas
+    ScaleManager.screenManager = screenManager
+
+    // Initial scale and DOM constraints
+    if (canvas.parentElement) {
+      canvas.parentElement.style.display = 'flex'
+      canvas.parentElement.style.justifyContent = 'center'
+      canvas.parentElement.style.alignItems = 'center'
+      canvas.parentElement.style.height = '100dvh'
+      canvas.parentElement.style.width = '100vw'
+      canvas.parentElement.style.margin = '0'
+      canvas.parentElement.style.overflow = 'hidden'
+      canvas.parentElement.style.backgroundColor = GAME_CONFIG.backgroundColor
+    }
+
+    ScaleManager.handleResize()
+    
     window.addEventListener('orientationchange', () => {
-      // Small delay to let the browser finish rotating
-      setTimeout(() => ScaleManager.handleOrientationChange(), 100)
+      setTimeout(() => ScaleManager.handleResize(), 100)
     })
-    window.addEventListener('resize', () => ScaleManager.handleOrientationChange())
+    window.addEventListener('resize', () => ScaleManager.handleResize())
   }
 
-  /**
-   * Returns the Phaser scale config block to embed in the game config.
-   */
-  static getPhaserScaleConfig(): Phaser.Types.Core.ScaleConfig {
-    return {
-      mode: Phaser.Scale.FIT,
-      autoCenter: Phaser.Scale.CENTER_BOTH,
-      width: GAME_CONFIG.width,
-      height: GAME_CONFIG.height,
-      parent: 'game-container',
-      expandParent: true
+  static handleResize(): void {
+    ScaleManager.checkOrientation()
+    if (!ScaleManager.canvas) return
+
+    // Apply FIT mode logic via CSS
+    const targetW = window.innerWidth
+    const targetH = window.innerHeight
+    const sourceW = GAME_CONFIG.width
+    const sourceH = GAME_CONFIG.height
+
+    const scale = Math.min(targetW / sourceW, targetH / sourceH)
+
+    ScaleManager.canvas.style.width = `${sourceW * scale}px`
+    ScaleManager.canvas.style.height = `${sourceH * scale}px`
+    
+    // Fire resize on ScreenManager if needed internally (though geometry stays GAME_CONFIG bounds)
+    if (ScaleManager.screenManager) {
+      ScaleManager.screenManager.resize(sourceW, sourceH)
     }
   }
 
-  /**
-   * Returns true if the current viewport is in landscape and the game
-   * is designed for portrait. Useful for showing an orientation prompt.
-   */
   static isWrongOrientation(): boolean {
-    // Portrait game → landscape viewport is "wrong"
     return window.innerWidth > window.innerHeight && window.innerWidth < 900
   }
 
-  /**
-   * Current viewport width.
-   */
   static get viewportWidth(): number {
     return window.innerWidth
   }
 
-  /**
-   * Current viewport height.
-   */
   static get viewportHeight(): number {
     return window.innerHeight
   }
 
-  private static handleOrientationChange(): void {
+  private static checkOrientation(): void {
     if (ScaleManager.isWrongOrientation()) {
       ScaleManager.showOrientationWarning()
     } else {
