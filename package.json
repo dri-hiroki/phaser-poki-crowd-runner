@@ -1,14 +1,18 @@
 {
-  "name": "phaser-poki-starter",
+  "name": "crowd-runner-3d",
   "version": "1.0.0",
-  "description": "Phaser 3 + TypeScript + Vite starter template with Poki SDK integration",
+  "description": "Crowd Runner 3D – Math Gates. Endless 3D runner with math gates, crowd mechanics, and Poki SDK.",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "three": "^0.162.0"
+  },
   "devDependencies": {
+    "@types/three": "^0.162.0",
     "pixi.js": "^8.6.2",
     "typescript": "^5.4.5",
     "vite": "^5.2.11"

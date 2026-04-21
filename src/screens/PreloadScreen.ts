@@ -34,10 +34,8 @@ export class PreloadScreen extends Screen {
 
     this.loadingText.text = 'Ready!'
 
-    // Notify Poki
-    if (window.PokiSDK) {
-      window.PokiSDK.gameLoadingFinished()
-    }
+    // Notify Poki that all assets are loaded
+    window.PokiSDK?.gameLoadingFinished()
 
     // Go to next
     setTimeout(() => {

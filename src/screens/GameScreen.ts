@@ -1,476 +1,521 @@
 /**
  * GameScreen.ts
- * PixiJS port of GameScene.
- * Manual implementation of game loop, AABB physics, pooling and rendering.
+ * Crowd Runner 3D main game screen.
+ *
+ * PixiJS layer: HUD only (crowd count, boss HP bar, mute button, pause overlay).
+ * Three.js layer: 3D world (track, crowd, gates, obstacles, boss wall).
+ *
+ * State machine: idle → running → boss → (victory | gameover) → result
  */
 
 import * as PIXI from 'pixi.js'
 import { Screen } from '../core/Screen'
+import { ThreeRenderer } from '../core/ThreeRenderer'
+import { CrowdSystem } from '../systems/CrowdSystem'
+import { GateSystem } from '../systems/GateSystem'
+import { ObstacleSystem } from '../systems/ObstacleSystem'
+import { LevelSystem } from '../systems/LevelSystem'
 import { ScoreSystem } from '../systems/ScoreSystem'
-import { DifficultySystem } from '../systems/DifficultySystem'
 import { SpawnSystem } from '../systems/SpawnSystem'
 import { AudioManager } from '../core/AudioManager'
+import { CrowdCounter } from '../components/CrowdCounter'
+import { BossHealthBar } from '../components/BossHealthBar'
 import { GAME_CONFIG } from '../data/gameConfig'
 import { BALANCING } from '../data/balancing'
-import { formatScore } from '../utils/helpers'
-import { AssetRegistry } from '../core/Assets'
+import { clamp } from '../utils/helpers'
+import { runMathGateSelfTests } from '../utils/mathGate'
+
+type GameState = 'idle' | 'running' | 'boss' | 'gameover'
 
 export class GameScreen extends Screen {
+  // ─── Systems ──────────────────────────────────────────────────────────────
+  private three!: ThreeRenderer
+  private crowd!: CrowdSystem
+  private gateSystem!: GateSystem
+  private obstacleSystem!: ObstacleSystem
+  private levelSystem!: LevelSystem
   private scoreSystem!: ScoreSystem
-  private difficultySystem!: DifficultySystem
   private spawnSystem!: SpawnSystem
 
-  // Layers
-  private bgLayer!: PIXI.Graphics
-  private worldLayer!: PIXI.Container
-  private hudLayer!: PIXI.Container
-  private pauseLayer!: PIXI.Container
-  private damageGraphics!: PIXI.Graphics
+  // ─── State ────────────────────────────────────────────────────────────────
+  private gameState: GameState = 'idle'
+  private bossHp: number = 0
+  private bossHpMax: number = 0
 
-  // Entities
-  private player!: PIXI.Sprite & { customCount: number }
-  private enemies: Array<PIXI.Sprite & { vx: number, vy: number, customCount: number, damageAccumulator: number, active: boolean }> = []
-  private coins: Array<PIXI.Sprite & { vy: number, active: boolean }> = []
-
-  // HUD
-  private scoreText!: PIXI.Text
-  private livesText!: PIXI.Text
-  private muteIcon!: PIXI.Text
-
-  // State
-  private lives: number = BALANCING.startingLives
-  private isPaused: boolean = false
-  private isGameOver: boolean = false
-
-  // Input
+  // ─── Input ────────────────────────────────────────────────────────────────
   private pointerDown: boolean = false
-  private pointerX: number = GAME_CONFIG.width / 2
+  private pointerStartX: number = 0
+  private pointerDeltaX: number = 0
   private keys: Record<string, boolean> = {}
 
-  // Spawn Refs
-  private enemySpawnEntry: any
-  private coinSpawnEntry: any
+  // ─── Crowd world position ─────────────────────────────────────────────────
+  /** Crowd X in Three.js world units */
+  private crowdWorldX: number = 0
+  /** Crowd Z scrolls forward each frame; camera tracks it */
+  private crowdWorldZ: number = 0
+
+  // ─── HUD (PixiJS) ─────────────────────────────────────────────────────────
+  private crowdCounter!: CrowdCounter
+  private bossHealthBar!: BossHealthBar
+  private muteBtn!: PIXI.Text
+  private pauseOverlay!: PIXI.Container
+  private scoreText!: PIXI.Text
+  private isPaused: boolean = false
+
+  // ─── Spawn entries ────────────────────────────────────────────────────────
+  private gateSpawnEntry: any = null
+  private obstacleSpawnEntry: any = null
 
   constructor(screenManager: any) {
     super(screenManager)
   }
 
-  async enter() {
-    this.lives = BALANCING.startingLives
-    this.isPaused = false
-    this.isGameOver = false
+  // ─── enter ────────────────────────────────────────────────────────────────
 
+  async enter(data?: { revive?: boolean; crowdCount?: number }) {
+    // Run math self-tests in dev
+    if (window.location.hostname === 'localhost') {
+      runMathGateSelfTests()
+    }
+
+    this.gameState = 'idle'
+    this.crowdWorldX = 0
+    this.crowdWorldZ = 0
+    this.isPaused = false
+
+    // ── Systems ──────────────────────────────────────────────────────────
+    const startCount = (data?.revive && data?.crowdCount)
+      ? Math.max(1, Math.floor(data.crowdCount * 0.5))
+      : 1
+
+    this.crowd = new CrowdSystem(startCount)
+    this.crowd.onCountChange = (n) => this.crowdCounter?.update(n, 0)
+
+    this.gateSystem = new GateSystem()
+    this.obstacleSystem = new ObstacleSystem()
+    this.levelSystem = new LevelSystem()
     this.scoreSystem = new ScoreSystem()
-    this.difficultySystem = new DifficultySystem()
     this.spawnSystem = new SpawnSystem()
 
-    this.enemies = []
-    this.coins = []
-
-    this.createWorld()
-    this.createPlayer()
-    this.createHUD()
-    this.createPauseOverlay()
-    this.setupInput()
-    this.setupSpawning()
-
-    if (window.PokiSDK) {
-      window.PokiSDK.gameplayStart()
-    }
-  }
-
-  private createWorld() {
-    this.bgLayer = new PIXI.Graphics()
-    this.bgLayer.rect(0, 0, GAME_CONFIG.width, GAME_CONFIG.height)
-    this.bgLayer.fill({ color: 0x1a1a2e })
-    this.addChild(this.bgLayer)
-
-    this.damageGraphics = new PIXI.Graphics()
-    this.addChild(this.damageGraphics)
-
-    this.worldLayer = new PIXI.Container()
-    this.addChild(this.worldLayer)
-
-    this.hudLayer = new PIXI.Container()
-    this.addChild(this.hudLayer)
-
-    this.pauseLayer = new PIXI.Container()
-    this.addChild(this.pauseLayer)
-  }
-
-  private createPlayer() {
-    this.player = new PIXI.Sprite(AssetRegistry.textures['player']) as any
-    this.player.anchor.set(0.5)
-    this.player.x = GAME_CONFIG.width / 2
-    this.player.y = GAME_CONFIG.height - 120
-    this.player.customCount = 10
-    this.worldLayer.addChild(this.player)
-  }
-
-  private setupSpawning() {
-    this.enemySpawnEntry = this.spawnSystem.schedule(
-      () => this.spawnEnemy(),
-      BALANCING.initialSpawnInterval
-    )
-
-    this.coinSpawnEntry = this.spawnSystem.schedule(
-      () => this.spawnCoin(),
-      BALANCING.initialSpawnInterval * 1.5
-    )
-  }
-
-  private spawnEnemy() {
-    let enemy = this.enemies.find(e => !e.active)
-    if (!enemy) {
-      enemy = new PIXI.Sprite(AssetRegistry.textures['enemy']) as any
-      enemy!.anchor.set(0.5)
-      this.enemies.push(enemy!)
-      this.worldLayer.addChild(enemy!)
+    // ── Level callbacks ──────────────────────────────────────────────────
+    this.levelSystem.onPhaseChange = (phase) => {
+      this._updateSpawnIntervals()
+      console.log(`[GameScreen] Phase → ${phase.phase}`)
     }
 
-    enemy!.active = true
-    enemy!.visible = true
-    enemy!.x = 30 + Math.random() * (GAME_CONFIG.width - 60)
-    enemy!.y = -20
-    enemy!.customCount = Math.floor(Math.random() * 10) + 5
-    enemy!.damageAccumulator = 0
-
-    const speed = 150 + this.difficultySystem.getDifficultyMultiplier() * 50
-    enemy!.vy = speed
-    enemy!.vx = (Math.random() * 80) - 40
-  }
-
-  private spawnCoin() {
-    let coin = this.coins.find(c => !c.active)
-    if (!coin) {
-      coin = new PIXI.Sprite(AssetRegistry.textures['coin']) as any
-      coin!.anchor.set(0.5)
-      this.coins.push(coin!)
-      this.worldLayer.addChild(coin!)
+    this.levelSystem.onBossWallSpawn = (hp, maxHp) => {
+      this.bossHp = hp
+      this.bossHpMax = maxHp
+      this._startBossPhase()
     }
 
-    coin!.active = true
-    coin!.visible = true
-    coin!.x = 30 + Math.random() * (GAME_CONFIG.width - 60)
-    coin!.y = -20
-    coin!.vy = 120
+    // ── Three.js renderer ────────────────────────────────────────────────
+    this.three = new ThreeRenderer()
+    const container = document.getElementById('game-container')!
+    this.three.init(container, GAME_CONFIG.width, GAME_CONFIG.height)
+
+    // ── PixiJS HUD ───────────────────────────────────────────────────────
+    this._buildHUD()
+    this._buildPauseOverlay()
+    this._setupInput()
+
+    // Initial crowd render
+    this.three.setCrowdCount(this.crowd.count, this.crowd.getFormationPositions())
+    this.crowdCounter.update(this.crowd.count, 0)
+
+    // ── Spawn scheduling ─────────────────────────────────────────────────
+    this._startSpawning()
+
+    // ── Poki ─────────────────────────────────────────────────────────────
+    window.PokiSDK?.gameplayStart()
+
+    this.gameState = 'running'
   }
 
-  private createHUD() {
-    const textStyle = new PIXI.TextStyle({ fontSize: 22, fill: '#ffffff', fontWeight: 'bold', fontFamily: 'Arial' })
-    this.scoreText = new PIXI.Text({ text: 'Score: 0', style: textStyle })
-    this.scoreText.anchor.set(0.5, 0)
-    this.scoreText.position.set(GAME_CONFIG.width / 2, 30)
+  // ─── HUD ──────────────────────────────────────────────────────────────────
 
-    const livesStyle = new PIXI.TextStyle({ fontSize: 20, fill: '#e74c3c', fontFamily: 'Arial' })
-    this.livesText = new PIXI.Text({ text: `❤️ ${this.lives}`, style: livesStyle })
-    this.livesText.anchor.set(1, 0)
-    this.livesText.position.set(GAME_CONFIG.width - 16, 16)
+  private _buildHUD(): void {
+    const cx = GAME_CONFIG.width / 2
 
+    // Crowd counter — top centre
+    this.crowdCounter = new CrowdCounter(cx, 55)
+    this.addChild(this.crowdCounter)
+
+    // Score — top left
+    const scoreStyle = new PIXI.TextStyle({ fontSize: 18, fill: '#ffffff', fontFamily: 'Arial', fontWeight: 'bold' })
+    this.scoreText = new PIXI.Text({ text: 'Score: 0', style: scoreStyle })
+    this.scoreText.position.set(12, 14)
+    this.addChild(this.scoreText)
+
+    // Mute icon — top right
     const muteStyle = new PIXI.TextStyle({ fontSize: 24 })
-    this.muteIcon = new PIXI.Text({ text: AudioManager.muted ? '🔇' : '🔊', style: muteStyle })
-    this.muteIcon.position.set(16, 16)
-    
-    // Interactions
-    this.muteIcon.eventMode = 'static'
-    this.muteIcon.cursor = 'pointer'
-    this.muteIcon.on('pointerdown', () => {
+    this.muteBtn = new PIXI.Text({ text: AudioManager.muted ? '🔇' : '🔊', style: muteStyle })
+    this.muteBtn.position.set(GAME_CONFIG.width - 44, 12)
+    this.muteBtn.eventMode = 'static'
+    this.muteBtn.cursor = 'pointer'
+    this.muteBtn.on('pointerdown', () => {
       AudioManager.toggleMute()
-      this.muteIcon.text = AudioManager.muted ? '🔇' : '🔊'
+      this.muteBtn.text = AudioManager.muted ? '🔇' : '🔊'
     })
+    this.addChild(this.muteBtn)
 
-    this.hudLayer.addChild(this.scoreText, this.livesText, this.muteIcon)
+    // Boss health bar — bottom centre, hidden until boss phase
+    this.bossHealthBar = new BossHealthBar(cx, GAME_CONFIG.height - 70, 300)
+    this.addChild(this.bossHealthBar)
   }
 
-  private createPauseOverlay() {
-    this.pauseLayer.visible = false
+  private _buildPauseOverlay(): void {
+    this.pauseOverlay = new PIXI.Container()
+    this.pauseOverlay.visible = false
 
     const dim = new PIXI.Graphics()
     dim.rect(0, 0, GAME_CONFIG.width, GAME_CONFIG.height)
-    dim.fill({ color: 0x000000, alpha: 0.6 })
+    dim.fill({ color: 0x000000, alpha: 0.65 })
+    this.pauseOverlay.addChild(dim)
 
-    const pStyle = new PIXI.TextStyle({ fontSize: 40, fill: '#ffffff', fontWeight: 'bold', fontFamily: 'Arial' })
+    const cx = GAME_CONFIG.width / 2
+    const cy = GAME_CONFIG.height / 2
+
+    const pStyle = new PIXI.TextStyle({ fontSize: 44, fill: '#ffffff', fontWeight: 'bold', fontFamily: 'Arial' })
     const pText = new PIXI.Text({ text: 'PAUSED', style: pStyle })
     pText.anchor.set(0.5)
-    pText.position.set(GAME_CONFIG.width / 2, GAME_CONFIG.height / 2 - 40)
+    pText.position.set(cx, cy - 30)
+    this.pauseOverlay.addChild(pText)
 
     const rStyle = new PIXI.TextStyle({ fontSize: 18, fill: '#aaaacc', fontFamily: 'Arial' })
     const rText = new PIXI.Text({ text: 'Press Escape to resume', style: rStyle })
     rText.anchor.set(0.5)
-    rText.position.set(GAME_CONFIG.width / 2, GAME_CONFIG.height / 2 + 20)
+    rText.position.set(cx, cy + 30)
+    this.pauseOverlay.addChild(rText)
 
-    this.pauseLayer.addChild(dim, pText, rText)
+    this.addChild(this.pauseOverlay)
   }
 
-  private setupInput() {
-    // Pixi federated events require tracking down/move on stage or background
-    this.bgLayer.eventMode = 'static'
-    this.bgLayer.on('pointerdown', (e) => { this.pointerDown = true; this.pointerX = e.global.x })
-    this.bgLayer.on('pointermove', (e) => { if (this.pointerDown) this.pointerX = e.global.x })
-    this.bgLayer.on('pointerup', () => { this.pointerDown = false })
-    this.bgLayer.on('pointerupoutside', () => { this.pointerDown = false })
+  // ─── Input ────────────────────────────────────────────────────────────────
 
+  private _setupInput(): void {
+    // Pointer drag for steering
+    const onPointerDown = (e: PointerEvent) => {
+      this.pointerDown = true
+      this.pointerStartX = e.clientX
+      this.pointerDeltaX = 0
+    }
+    const onPointerMove = (e: PointerEvent) => {
+      if (!this.pointerDown) return
+      this.pointerDeltaX = e.clientX - this.pointerStartX
+      this.pointerStartX = e.clientX
+    }
+    const onPointerUp = () => {
+      this.pointerDown = false
+      this.pointerDeltaX = 0
+    }
+
+    window.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
+
+    // Keyboard
     const onKeyDown = (e: KeyboardEvent) => {
       this.keys[e.key] = true
-      if (e.key === 'Escape') this.togglePause()
+      if (e.key === 'Escape') this._togglePause()
     }
-    const onKeyUp = (e: KeyboardEvent) => {
-      this.keys[e.key] = false
-    }
+    const onKeyUp = (e: KeyboardEvent) => { this.keys[e.key] = false }
 
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
 
+    // Clean up on screen exit
     this.on('removed', () => {
+      window.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     })
   }
 
-  private togglePause() {
+  private _togglePause(): void {
     this.isPaused = !this.isPaused
-    this.pauseLayer.visible = this.isPaused
+    this.pauseOverlay.visible = this.isPaused
     this.isPaused ? this.spawnSystem.pause() : this.spawnSystem.resume()
   }
 
-  update(deltaMs: number) {
-    if (this.isGameOver || this.isPaused) return
+  // ─── Spawning ─────────────────────────────────────────────────────────────
 
-    const deltaSec = deltaMs / 1000
+  private _startSpawning(): void {
+    const phase = this.levelSystem.currentPhaseConfig
+    const gateIntervalMs = phase.gateIntervalSec.min * 1000
 
-    this.difficultySystem.update(deltaMs)
-    this.enemySpawnEntry.intervalMs = this.difficultySystem.getCurrentSpawnInterval()
-    this.coinSpawnEntry.intervalMs = this.difficultySystem.getCurrentSpawnInterval() * 1.5
+    this.gateSpawnEntry = this.spawnSystem.schedule(
+      () => this._spawnGatePair(),
+      gateIntervalMs,
+      false
+    )
 
+    this.obstacleSpawnEntry = this.spawnSystem.schedule(
+      () => this._spawnObstacle(),
+      phase.obstacleIntervalSec * 1000,
+      false
+    )
+  }
+
+  private _updateSpawnIntervals(): void {
+    const phase = this.levelSystem.currentPhaseConfig
+    if (this.gateSpawnEntry) {
+      this.gateSpawnEntry.intervalMs = phase.hasGates
+        ? phase.gateIntervalSec.min * 1000
+        : Infinity
+    }
+    if (this.obstacleSpawnEntry) {
+      this.obstacleSpawnEntry.intervalMs = phase.obstacleIntervalSec * 1000
+    }
+  }
+
+  private _spawnGatePair(): void {
+    if (this.gameState !== 'running') return
+    if (!this.levelSystem.currentPhaseConfig.hasGates) return
+
+    const [left, right] = this.gateSystem.spawnPair(
+      this.levelSystem.currentPhase,
+      this.crowd.count,
+      this.crowdWorldZ
+    )
+
+    this.three.addGate(left.id,  left.spec,  left.worldZ,  left.worldX)
+    this.three.addGate(right.id, right.spec, right.worldZ, right.worldX)
+  }
+
+  private _spawnObstacle(): void {
+    if (this.gameState !== 'running') return
+    if (this.levelSystem.isBossPhase()) return
+
+    const entity = this.obstacleSystem.spawn(this.crowdWorldZ)
+    this.three.addObstacle(entity.id, entity.type, entity.worldZ, entity.worldX)
+  }
+
+  // ─── Boss phase ───────────────────────────────────────────────────────────
+
+  private _startBossPhase(): void {
+    this.gameState = 'boss'
+    this.spawnSystem.pause()
+
+    this.bossHp = this.bossHpMax
+    this.bossHealthBar.update(this.bossHp, this.bossHpMax)
+    this.bossHealthBar.show()
+
+    const bossZ = this.crowdWorldZ - 50  // 50 units ahead
+    this.three.showBossWall(this.bossHp, this.bossHpMax, bossZ)
+  }
+
+  // ─── Main update loop ─────────────────────────────────────────────────────
+
+  update(deltaMs: number): void {
+    if (this.gameState === 'gameover') return
+    if (this.isPaused) return
+
+    const dtSec = deltaMs / 1000
+
+    // ── Level progression ──────────────────────────────────────────────────
+    this.levelSystem.update(deltaMs)
+
+    // ── Score: distance ───────────────────────────────────────────────────
+    if (this.gameState === 'running') {
+      const speed = this.levelSystem.trackSpeed
+      const metersTravelled = speed * dtSec
+      this.scoreSystem.add(Math.floor(metersTravelled * BALANCING.SCORE_PER_METER))
+    }
+
+    // ── World scroll (both running and boss approach) ─────────────────────
+    const speed = this.levelSystem.trackSpeed
+    this.crowdWorldZ -= speed * dtSec
+
+    // ── Lateral steering ──────────────────────────────────────────────────
+    this._updateSteering(dtSec)
+
+    // ── Push crowd position to renderer ───────────────────────────────────
+    this.three.setCrowdPosition(this.crowdWorldX, this.crowdWorldZ)
+    this.three.setCrowdCount(this.crowd.count, this.crowd.getFormationPositions())
+
+    // ── Gate collisions ───────────────────────────────────────────────────
+    if (this.gameState === 'running') {
+      this._checkGates()
+      this._cullEntities()
+    }
+
+    // ── Obstacle collisions ───────────────────────────────────────────────
+    if (this.gameState === 'running') {
+      this._checkObstacles()
+    }
+
+    // ── Boss damage ───────────────────────────────────────────────────────
+    if (this.gameState === 'boss') {
+      this._updateBoss(dtSec)
+    }
+
+    // ── Spawn tick ────────────────────────────────────────────────────────
     this.spawnSystem.tick(deltaMs)
-    this.updatePlayerMovement(deltaSec)
-    this.updateEntities(deltaSec)
-    this.checkCollisions()
-    this.applyProjectileDamage(deltaMs)
-    this.cleanupOffscreenObjects()
+
+    // ── Three.js render ───────────────────────────────────────────────────
+    this.three.update(deltaMs)
+
+    // ── HUD ───────────────────────────────────────────────────────────────
+    this.crowdCounter.update(this.crowd.count, deltaMs)
+    this.scoreText.text = `Score: ${this.scoreSystem.getScore().toLocaleString()}`
   }
 
-  private updatePlayerMovement(deltaSec: number) {
-    const speed = BALANCING.playerSpeed
-    let vx = 0
+  // ─── Steering ─────────────────────────────────────────────────────────────
 
-    const leftDown = this.keys['ArrowLeft'] || this.keys['a'] || this.keys['A']
-    const rightDown = this.keys['ArrowRight'] || this.keys['d'] || this.keys['D']
+  private _updateSteering(dtSec: number): void {
+    const steerSpeed = BALANCING.CROWD_STEER_SPEED
+    let dx = 0
 
-    if (leftDown) vx = -speed
-    else if (rightDown) vx = speed
+    // Arrow keys / WASD
+    if (this.keys['ArrowLeft']  || this.keys['a'] || this.keys['A']) dx -= steerSpeed
+    if (this.keys['ArrowRight'] || this.keys['d'] || this.keys['D']) dx += steerSpeed
 
-    if (this.pointerDown && !leftDown && !rightDown) {
-      const diff = this.pointerX - this.player.x
-      if (Math.abs(diff) > 8) {
-        vx = Math.sign(diff) * speed
-      }
+    // Touch / mouse drag
+    if (this.pointerDown && dx === 0) {
+      const screenW = GAME_CONFIG.width
+      // Map screen pixel delta to world units
+      dx = (this.pointerDeltaX / screenW) * steerSpeed * 12
+      this.pointerDeltaX = 0  // consume delta each frame
     }
 
-    this.player.x += vx * deltaSec
-
-    // Collision with world bounds
-    const halfWidth = this.player.width / 2
-    if (this.player.x < halfWidth) this.player.x = halfWidth
-    if (this.player.x > GAME_CONFIG.width - halfWidth) this.player.x = GAME_CONFIG.width - halfWidth
-  }
-
-  private updateEntities(deltaSec: number) {
-    for (const e of this.enemies) {
-      if (e.active) {
-        e.y += e.vy * deltaSec
-        e.x += e.vx * deltaSec
-      }
-    }
-    for (const c of this.coins) {
-      if (c.active) {
-        c.y += c.vy * deltaSec
-      }
+    if (dx !== 0) {
+      this.crowdWorldX = clamp(
+        this.crowdWorldX + dx * dtSec,
+        -BALANCING.TRACK_HALF_W,
+        BALANCING.TRACK_HALF_W
+      )
     }
   }
 
-  // Generic AABB collision
-  private isOverlapping(s1: PIXI.Sprite, s2: PIXI.Sprite): boolean {
-    const b1 = s1.getBounds()
-    const b2 = s2.getBounds()
-    return b1.x < b2.x + b2.width &&
-           b1.x + b1.width > b2.x &&
-           b1.y < b2.y + b2.height &&
-           b1.height + b1.y > b2.y
-  }
+  // ─── Gate logic ───────────────────────────────────────────────────────────
 
-  private checkCollisions() {
-    for (const e of this.enemies) {
-      if (e.active && this.isOverlapping(this.player, e)) {
-        e.active = false
-        e.visible = false
-        this.handleHitEnemy()
-      }
+  private _checkGates(): void {
+    const hit = this.gateSystem.checkPassage(this.crowdWorldX, this.crowdWorldZ)
+    if (!hit) return
+
+    // Apply gate operation to crowd
+    this.crowd.applyOp(hit.spec.op, hit.spec.value)
+
+    // Visual + audio feedback
+    this.three.flashGate(hit.id)
+    this.three.removeGate(hit.id)
+    AudioManager.playSfx(null, `gate_${hit.spec.op}`)
+
+    // Score bonus for optimal choice
+    if (hit.isOptimal) {
+      this.scoreSystem.add(BALANCING.SCORE_OPTIMAL_GATE)
     }
 
-    for (const c of this.coins) {
-      if (c.active && this.isOverlapping(this.player, c)) {
-        c.active = false
-        c.visible = false
-        this.handleCollectCoin()
-      }
+    // Game over if crowd wiped out by gate (e.g. ÷ gate when already at 1)
+    if (this.crowd.isDead()) {
+      this._triggerGameOver()
     }
   }
 
-  private handleHitEnemy() {
-    this.lives--
-    this.updateHUD()
+  private _cullEntities(): void {
+    // Gates scrolled past
+    const culledGates = this.gateSystem.cullBehind(this.crowdWorldZ)
+    for (const id of culledGates) this.three.removeGate(id)
 
-    // Tween Hit Flash manually
-    let flashTicks = 0
-    let count = 0
-    const flashLoop = () => {
-      if (!this.player || this.isGameOver) {
-        this.app.ticker.remove(flashLoop)
+    // Obstacles scrolled past
+    const culledObs = this.obstacleSystem.cullBehind(this.crowdWorldZ)
+    for (const id of culledObs) this.three.removeObstacle(id)
+  }
+
+  // ─── Obstacle logic ───────────────────────────────────────────────────────
+
+  private _checkObstacles(): void {
+    const hits = this.obstacleSystem.checkCollisions(
+      this.crowdWorldX,
+      this.crowdWorldZ,
+      BALANCING.CROWD_COLLISION_RADIUS * Math.min(3, 1 + this.crowd.count * 0.05)
+    )
+
+    for (const obs of hits) {
+      this.crowd.remove(BALANCING.OBSTACLE_DAMAGE)
+      this.three.removeObstacle(obs.id)
+      this.three.triggerShake()
+      AudioManager.playSfx(null, 'obstacle_hit')
+
+      if (this.crowd.isDead()) {
+        this._triggerGameOver()
         return
       }
-      flashTicks++
-      if (flashTicks > 5) { // toggle every ~5 frames
-        flashTicks = 0
-        count++
-        this.player.alpha = this.player.alpha === 1 ? 0.3 : 1
-        if (count >= 6) {
-          this.player.alpha = 1
-          this.app.ticker.remove(flashLoop)
-        }
-      }
-    }
-    this.app.ticker.add(flashLoop)
-
-    AudioManager.playSfx(null as any, 'sfx_hurt')
-
-    if (this.lives <= 0) {
-      this.triggerGameOver()
     }
   }
 
-  private handleCollectCoin() {
-    this.scoreSystem.add(BALANCING.pointsPerEvent)
-    this.updateHUD()
-    AudioManager.playSfx(null as any, 'sfx_score')
-  }
+  // ─── Boss logic ───────────────────────────────────────────────────────────
 
-  private applyProjectileDamage(deltaMs: number) {
-    const playerCount = this.player.customCount || 1
+  private _updateBoss(dtSec: number): void {
+    // Crowd damages boss wall at rate: crowdCount × damagePerSec
+    const damage = this.crowd.count * BALANCING.BOSS_DAMAGE_PER_CLONE_PER_SEC * dtSec
+    this.bossHp -= damage
 
-    const width = 20 + playerCount * 2
-    const height = 300
-    
-    const left = this.player.x - width / 2
-    const right = this.player.x + width / 2
-    const bottom = this.player.y - 20
-    const top = bottom - height
-
-    // Optional visual
-    this.damageGraphics.clear()
-    const alpha = Math.min(0.2 + playerCount * 0.01, 0.6)
-    this.damageGraphics.rect(left, top, width, height)
-    this.damageGraphics.fill({ color: 0x00ffff, alpha })
-
-    let closestEnemy: any = null
-    let closestDist = Infinity
-
-    for (const enemy of this.enemies) {
-      if (!enemy.active) continue
-
-      if (enemy.x >= left && enemy.x <= right && enemy.y >= top && enemy.y <= bottom) {
-        const yDist = this.player.y - enemy.y
-        if (yDist > 0 && yDist < closestDist) {
-          closestDist = yDist
-          closestEnemy = enemy
-        }
-      }
+    if (this.bossHp <= 0) {
+      this.bossHp = 0
+      this._triggerVictory()
+      return
     }
 
-    if (closestEnemy) {
-      const damageRate = playerCount * 0.05
-      const damageToAdd = damageRate * (deltaMs / 16.666)
-
-      let accum = closestEnemy.damageAccumulator || 0
-      accum += damageToAdd
-
-      if (accum >= 1) {
-        const drop = Math.floor(accum)
-        closestEnemy.customCount = (closestEnemy.customCount || 1) - drop
-        accum -= drop
-
-        if (closestEnemy.customCount <= 0) {
-          closestEnemy.active = false 
-          closestEnemy.visible = false
-          this.scoreSystem.add(BALANCING.pointsPerEvent)
-          this.updateHUD()
-          AudioManager.playSfx(null as any, 'sfx_score')
-        } else {
-          closestEnemy.damageAccumulator = accum
-        }
-      } else {
-        closestEnemy.damageAccumulator = accum
-      }
-    }
+    this.bossHealthBar.update(this.bossHp, this.bossHpMax)
+    this.three.updateBossWall(this.bossHp / this.bossHpMax)
   }
 
-  private cleanupOffscreenObjects() {
-    const bottom = GAME_CONFIG.height + 60
-    for (const e of this.enemies) {
-      if (e.active && e.y > bottom) {
-        e.active = false
-        e.visible = false
-      }
-    }
-    for (const c of this.coins) {
-      if (c.active && c.y > bottom) {
-        c.active = false
-        c.visible = false
-      }
-    }
+  // ─── Win / Lose ───────────────────────────────────────────────────────────
+
+  private _triggerVictory(): void {
+    if (this.gameState === 'gameover') return
+    this.gameState = 'gameover'
+
+    this.scoreSystem.add(BALANCING.SCORE_BOSS_DEFEAT)
+    this.three.hideBossWall()
+    AudioManager.playSfx(null, 'boss_defeat')
+    LevelSystem.incrementRunNumber()
+
+    this._goToResult({ victory: true })
   }
 
-  private updateHUD() {
-    this.scoreText.text = `Score: ${formatScore(this.scoreSystem.getScore())}`
-    this.livesText.text = `❤️ ${this.lives}`
-  }
+  private _triggerGameOver(): void {
+    if (this.gameState === 'gameover') return
+    this.gameState = 'gameover'
 
-  private triggerGameOver() {
-    this.isGameOver = true
     this.spawnSystem.clear()
+    AudioManager.playSfx(null, 'game_over')
 
-    if (window.PokiSDK) {
-      window.PokiSDK.gameplayStop()
-    }
+    // Camera shake then transition
+    this.three.triggerShake()
+    window.PokiSDK?.gameplayStop()
 
-    // Manual camera shake & fade setup
-    let shakeFrame = 0
-    const ox = this.worldLayer.x, oy = this.worldLayer.y
-    const shakeLoop = () => {
-      if (shakeFrame++ < 15) {
-        this.worldLayer.x = ox + (Math.random() - 0.5) * 10
-        this.worldLayer.y = oy + (Math.random() - 0.5) * 10
-      } else {
-        this.worldLayer.x = ox
-        this.worldLayer.y = oy
-        this.app.ticker.remove(shakeLoop)
-        
-        setTimeout(() => {
-          this.screenManager.goTo('ResultScreen', {
-            score: this.scoreSystem.getScore(),
-            highScore: this.scoreSystem.getHighScore(),
-            isNewHighScore: this.scoreSystem.isNewHighScore()
-          })
-        }, 600)
-      }
-    }
-    this.app.ticker.add(shakeLoop)
+    setTimeout(() => {
+      this._goToResult({ victory: false })
+    }, 700)
   }
 
-  async exit() {
+  private _goToResult(opts: { victory: boolean }): void {
+    this.screenManager.goTo('ResultScreen', {
+      score: this.scoreSystem.getScore(),
+      highScore: this.scoreSystem.getHighScore(),
+      isNewHighScore: this.scoreSystem.isNewHighScore(),
+      victory: opts.victory,
+      crowdCount: this.crowd.count
+    })
+  }
+
+  // ─── exit / cleanup ───────────────────────────────────────────────────────
+
+  async exit(): Promise<void> {
     this.spawnSystem.clear()
+    this.three.destroy()
     this.removeChildren()
+
+    this.gateSystem.clear()
+    this.obstacleSystem.clear()
   }
 
-  resize(_width: number, _height: number) {}
+  resize(_w: number, _h: number): void {}
 }

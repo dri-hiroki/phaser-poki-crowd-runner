@@ -1,6 +1,8 @@
 /**
  * main.ts
- * PixiJS game bootstrap.
+ * Bootstrap: PixiJS app (HUD/screens) + ThreeRenderer (3D world).
+ * PixiJS canvas sits on top (z-index 1) with transparent background.
+ * Three.js canvas sits behind (z-index 0), inserted first into #game-container.
  */
 
 import * as PIXI from 'pixi.js'
@@ -15,21 +17,24 @@ import { ScaleManager } from './core/ScaleManager'
 import { GAME_CONFIG } from './data/gameConfig'
 
 async function init() {
+  const container = document.getElementById('game-container')!
+
+  // ── PixiJS (HUD + screens layer) ──────────────────────────────────────────
   const app = new PIXI.Application()
   await app.init({
     width: GAME_CONFIG.width,
     height: GAME_CONFIG.height,
-    backgroundColor: GAME_CONFIG.backgroundColor,
+    backgroundAlpha: 0,          // transparent — Three.js shows through
     antialias: false,
     resolution: window.devicePixelRatio || 1,
     autoDensity: true
   })
 
-  const container = document.getElementById('game-container')
-  if (container) {
-    container.appendChild(app.canvas)
-  }
+  // Give the PixiJS canvas an id so CSS can target it
+  app.canvas.id = 'pixi-canvas'
+  container.appendChild(app.canvas)
 
+  // ── Screen routing ────────────────────────────────────────────────────────
   const screenManager = new ScreenManager(app)
   screenManager.register('BootScreen', new BootScreen(screenManager))
   screenManager.register('PreloadScreen', new PreloadScreen(screenManager))
@@ -41,10 +46,10 @@ async function init() {
     screenManager.update(app.ticker.deltaMS)
   })
 
-  // Start ScaleManager and link to ScreenManager
+  // ── Scale + orientation ───────────────────────────────────────────────────
   ScaleManager.init(app.canvas, screenManager)
 
-  // Start with BootScreen
+  // ── Start ─────────────────────────────────────────────────────────────────
   screenManager.goTo('BootScreen')
 }
 

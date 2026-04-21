@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#1a1a2e" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>My Game</title>
+    <title>Crowd Runner 3D</title>
     <style>
       * {
         margin: 0;
@@ -26,8 +26,29 @@
         touch-action: none;
       }
 
-      canvas {
+      /* Container holds both Three.js canvas (behind) and PixiJS canvas (front) */
+      #game-container {
+        position: relative;
+        display: inline-block;
+        line-height: 0;
+      }
+
+      /* Three.js canvas: behind, absolutely positioned to fill container */
+      #three-canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 0;
         display: block;
+        touch-action: none;
+      }
+
+      /* PixiJS canvas: on top, transparent background, passes touch through game area */
+      #pixi-canvas {
+        position: relative;
+        z-index: 1;
+        display: block;
+        background: transparent !important;
         touch-action: none;
       }
     </style>

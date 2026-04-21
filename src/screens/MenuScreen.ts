@@ -67,7 +67,7 @@ export class MenuScreen extends Screen {
     title.position.set(cx, cy - 165)
     
     const tagStyle = new PIXI.TextStyle({ fill: 0xaaaacc, fontSize: 20, fontFamily: 'Arial, sans-serif' })
-    const tag = new PIXI.Text({ text: 'Tap to survive', style: tagStyle })
+    const tag = new PIXI.Text({ text: 'Steer your crowd through the gates!', style: tagStyle })
     tag.anchor.set(0.5)
     tag.position.set(cx, cy - 100)
 
