@@ -1,130 +1,153 @@
-# Phaser 3 + Poki Starter Template
+# Crowd Runner — Game Design Document
 
-A production-ready starter framework for casual browser games built with **Phaser 3**, **TypeScript**, and **Vite**, with **Poki SDK** integration built in from day one.
+**Stack:** Phaser 3 · TypeScript · Vite · Poki SDK · Three.js
+**Template base:** tatosgames/phaser-poki-starter
+**Target platform:** Browser (desktop + mobile) via Poki
+**Genre:** Casual runner / math puzzle
+**Monetization:** Poki ad-breaks (mid-game interstitials + rewarded)
 
-## Quick Start (under 5 minutes)
+---
 
-```bash
-# 1. Clone or download this template
-git clone <your-repo-url> my-game
-cd my-game
+## 1. Concept
 
-# 2. Install dependencies
-npm install
+The player controls a growing/shrinking crowd that runs through a corridor of math gates. Each gate applies an arithmetic operation (+, -, x, /) to the crowd size. Reach the Boss Wall at the end with enough runners to break through and win the level.
 
-# 3. Start the dev server
-npm run dev
-```
+Core loop (15-45 s per level): RUN → CHOOSE GATE → CROWD CHANGES → NEXT GATE → BOSS WALL → WIN / LOSE
 
-Open `http://localhost:3000` — you'll see the full scene flow: Boot → Preload → Menu → Game → Result.
+---
 
-## Build for Production
+## 2. Game Architecture
 
-```bash
-npm run build
-```
+### Renderer Split
 
-Output goes to `dist/`. Upload the entire `dist/` folder to Poki or any static host.
+Two co-existing renderers on separate layers:
 
-## Project Structure
+| Layer | Technology | Responsibility |
+|-------|-----------|---------------|
+| 3D Scene | Three.js WebGLRenderer | Crowd characters, ground, gate columns, boss wall, particles |
+| 2D HUD / UI | Phaser 3 canvas overlay | Score counter, gate labels, combo text, ad-break overlay |
 
-```
-/src
-  /core
-    Config.ts           — Typed game config interface and default values
-    ScaleManager.ts     — Responsive canvas scaling (portrait-first, 9:16)
-    AudioManager.ts     — Global mute/unmute, browser audio unlock, SFX/music control
-    SaveManager.ts      — localStorage wrapper with typed save/load and silent error handling
-  /scenes
-    BootScene.ts        — Initializes core services, detects environment, routes to PreloadScene
-    PreloadScene.ts     — Loads all assets with progress bar; plugin fires gameLoadingFinished
-    MenuScene.ts        — Title screen with Play button and mute toggle
-    GameScene.ts        — Placeholder gameplay loop with all systems wired up
-    ResultScene.ts      — Score display, restart + menu buttons; rewarded ad hook placeholder
-  /components
-    UIButton.ts         — Reusable Phaser button with hover/press states and keyboard support
-    ProgressBar.ts      — Reusable loading progress bar
-  /systems
-    ScoreSystem.ts      — Add/reset/get score; high score persisted via SaveManager
-    DifficultySystem.ts — Time-based difficulty multiplier driven by balancing.ts
-    SpawnSystem.ts      — Timed spawn controller integrated with the game loop
-  /data
-    gameConfig.ts       — Single source of truth: dimensions, colors, debug flags
-    balancing.ts        — All tunable numbers: spawn rates, difficulty ramp, points
-  /utils
-    helpers.ts          — Shared utility functions (random, clamp, format, etc.)
-  main.ts               — Phaser game bootstrap with Poki plugin config
-/public
-  /assets               — Game assets (add your images, audio, spritesheets here)
-index.html              — Entry HTML with correct mobile viewport meta tags
-```
+Three.js canvas sits behind the Phaser canvas (transparent background). Both mounted in #game-container.
 
-## Poki SDK Integration
+### Scene Graph
 
-The `PokiPlugin` is registered globally in `main.ts`. It automatically:
+Scene > AmbientLight + DirectionalLight + PathGroup + GateGroup + CrowdGroup (InstancedMesh, maxCount 500) + BossWall
 
-- Fires `gameLoadingFinished` when `PreloadScene` finishes loading
-- Fires `gameplayStart` when `GameScene` starts
-- Fires `gameplayStop` when `GameScene` stops
-- Disables input and audio during ad breaks
+### ICrowdRenderer Interface
 
-### Rewarded Ads
+interface ICrowdRenderer {
+  init(scene, maxCount): void
+  setCount(n): void
+  update(delta, runnerZ): void
+  triggerMerge(from, to): void
+  triggerSplit(from, to): void
+  dispose(): void
+}
 
-In `ResultScene.ts`, look for the `// TODO: rewarded break hook` comment and add:
+ThreeCrowdRenderer uses THREE.InstancedMesh for the crowd (1 draw call for up to 500 runners).
 
-```ts
-const poki = this.plugins.get('poki') as PokiPlugin
-poki.rewardedBreak().then((rewarded) => {
-  if (rewarded) {
-    // Give the player their reward
-  }
-})
-```
+---
 
-### Commercial Breaks
+## 3. Core Systems
 
-`autoCommercialBreak: true` is set in the plugin config, so Poki will automatically trigger commercial breaks between gameplay sessions.
+### Gate System
 
-## Making Your Game
+Gate operations: + (green, always beneficial) | x (blue, beneficial if crowd > 1) | - (orange, harmful) | / (red, always harmful)
 
-Replace the placeholder gameplay in `GameScene.ts` with your actual game logic. The systems are already wired up:
+Pairing rule "mixed-advantage": left gate and right gate always have opposite valence on easy/medium difficulty.
 
-| System | What to replace |
-|--------|----------------|
-| `SpawnSystem` | Change spawn callbacks to create your actual game objects |
-| `ScoreSystem` | Call `scoreSystem.add(points)` when the player earns points |
-| `DifficultySystem` | Tune values in `balancing.ts` to control ramp speed |
-| `GameScene` | Add your player, enemies, physics groups, collision handlers |
+### Crowd Formation
 
-## Configuration
+Triangular wedge formation expanding behind the lead runner. Max 500 runners.
 
-All tunable values are in two files:
+LOD levels:
+- 0-60: full animation + shadows
+- 61-200: static pose, no shadow
+- 201-500: sprite billboard fallback
 
-- **`src/data/gameConfig.ts`** — title, dimensions, background color, debug flag
-- **`src/data/balancing.ts`** — spawn intervals, difficulty ramp time, points per event
+### Boss Wall
 
-## Type Checking
+HP = boss.hp. Each collision tick removes floor(crowd.count * DAMAGE_PER_RUNNER) HP. Wall cracks via animated displacementMap UV scroll.
 
-```bash
-npm run typecheck
-```
+---
 
-## Adding Assets
+## 4. Math Gate Logic
 
-Place images, audio, and spritesheets in `/public/assets/`. Load them in `PreloadScene.ts`:
+- +: crowdCount + value
+- -: max(1, crowdCount - value)
+- x: min(500, crowdCount * value)
+- /: max(1, floor(crowdCount / value))
 
-```ts
-this.load.image('player', 'assets/player.png')
-this.load.audio('bgm', 'assets/bgm.mp3')
-```
+Division never reduces crowd below 1. Multiplication caps at 500.
 
-## Mobile Notes
+---
 
-- Canvas is portrait-first (480×854, 9:16)
-- All buttons have minimum 44×44px hit areas
-- Touch events are handled by Phaser's input system
-- `user-scalable=no` prevents accidental zoom on double-tap
+## 5. World Progression
 
-## License
+| World | Levels | Theme | New mechanic |
+|-------|--------|-------|-------------|
+| 1 | 1-10 | City | + and - only |
+| 2 | 11-20 | Jungle | x introduced |
+| 3 | 21-30 | Desert | / introduced |
+| 4 | 31-40 | Snow | Same-valence gate risk |
 
-MIT — use this template for any project, commercial or personal.
+---
+
+## 6. Asset Pipeline
+
+- Characters: glTF 2.0 + Draco compression, 15-bone humanoid, single Run animation, 512x512 atlas
+- Per-instance color tint via InstancedBufferAttribute (4 variants)
+- Ground: tiling PBR texture scrolled via MeshStandardMaterial offset
+- Gate pillars: BoxGeometry + MeshToonMaterial
+- Skybox: CubeTextureLoader per world theme
+
+---
+
+## 7. Performance Targets
+
+| Metric | Target |
+|--------|--------|
+| FPS | 60 desktop / 30 mobile |
+| Draw calls | < 20 per frame |
+| Max crowd | 500 (1 draw call) |
+| Level load | < 3 s on 4G |
+| JS bundle gzip | < 400 KB |
+| Assets per world | < 8 MB |
+
+---
+
+## 8. Dependencies
+
+- phaser: ^3.88.0
+- three: ^0.176.0
+- poki-sdk: ^1.0.0
+- @types/three: ^0.176.0
+
+Removed from base template: pixi.js, pixi3d
+
+---
+
+## 9. Poki SDK Integration
+
+- gameLoadingStart() / gameLoadingFinished() on boot
+- commercialBreak() after boss wall break (level end)
+- rewardedBreak() on Game Over ("Continue with half crowd?")
+
+---
+
+## 10. Development Roadmap
+
+| Milestone | Deliverable |
+|-----------|------------|
+| M1 | Three.js renderer + Phaser HUD overlay |
+| M2 | Crowd InstancedMesh: spawn, formation, animation |
+| M3 | Procedural path + scrolling ground |
+| M4 | Gate system: spawn, detect, apply math op |
+| M5 | Boss Wall: HP, crack animation, win condition |
+| M6 | World 1 complete (10 levels, city theme) |
+| M7 | Worlds 2-4 + Poki SDK ad-break integration |
+| M8 | Polish: juice, particles, sound, Poki review submission |
+
+---
+
+*GDD v1.1 — Three.js architecture — tatosgames/crowd-runner*
