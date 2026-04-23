@@ -23,13 +23,6 @@ export class ScaleManager {
 
     // Initial scale and DOM constraints
     if (canvas.parentElement) {
-      canvas.parentElement.style.display = 'flex'
-      canvas.parentElement.style.justifyContent = 'center'
-      canvas.parentElement.style.alignItems = 'center'
-      canvas.parentElement.style.height = '100dvh'
-      canvas.parentElement.style.width = '100vw'
-      canvas.parentElement.style.margin = '0'
-      canvas.parentElement.style.overflow = 'hidden'
       canvas.parentElement.style.backgroundColor = GAME_CONFIG.backgroundColor
     }
 

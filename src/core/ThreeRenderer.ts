@@ -460,6 +460,10 @@ export class ThreeRenderer implements ICrowdRenderer {
     this.renderer.setScissor(vx, vy, vw, vh)
     this.renderer.setScissorTest(this.viewportHeightFactor < 1)
 
+    // Update aspect ratio so scaling is undistorted
+    this.camera.aspect = vw / vh
+    this.camera.updateProjectionMatrix()
+
     this.renderer.render(this.scene, this.camera)
   }
 
