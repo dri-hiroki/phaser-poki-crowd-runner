@@ -391,22 +391,24 @@ export class GameScreen extends Screen {
     if (!this.isGameplayActive) return
 
     const steerSpeed = BALANCING.CROWD_STEER_SPEED
-    let dx = 0
+    let velocityX = 0
+    let displacementX = 0
 
     // Arrow keys / WASD
-    if (this.keys['ArrowLeft']  || this.keys['a'] || this.keys['A']) dx -= steerSpeed
-    if (this.keys['ArrowRight'] || this.keys['d'] || this.keys['D']) dx += steerSpeed
+    if (this.keys['ArrowLeft']  || this.keys['a'] || this.keys['A']) velocityX -= steerSpeed
+    if (this.keys['ArrowRight'] || this.keys['d'] || this.keys['D']) velocityX += steerSpeed
 
     // Touch / mouse drag
-    if (this.pointerDown && dx === 0) {
-      // Map screen pixel delta to world units based on active dimension
-      dx = (this.pointerDeltaX / window.innerWidth) * steerSpeed * 12
+    if (this.pointerDown && velocityX === 0) {
+      // Map screen pixel delta to world displacement directly (not multiplied by frame delta)
+      // Dragging roughly ~60% of the screen width crosses the entire track (6 units)
+      displacementX = (this.pointerDeltaX / window.innerWidth) * 10
       this.pointerDeltaX = 0  // consume delta each frame
     }
 
-    if (dx !== 0) {
+    if (velocityX !== 0 || displacementX !== 0) {
       this.crowdWorldX = clamp(
-        this.crowdWorldX + dx * dtSec,
+        this.crowdWorldX + (velocityX * dtSec) + displacementX,
         -BALANCING.TRACK_HALF_W,
         BALANCING.TRACK_HALF_W
       )
