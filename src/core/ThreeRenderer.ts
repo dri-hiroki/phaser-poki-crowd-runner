@@ -127,7 +127,6 @@ export class ThreeRenderer implements ICrowdRenderer {
   // M6 boss wall
   private bossWallMesh?: Mesh
   private bossWallHpBar?: Mesh
-  private bossWallZ: number = 0
 
   // M8 camera shake
   private shakeTimer: number = 0
@@ -375,7 +374,6 @@ export class ThreeRenderer implements ICrowdRenderer {
 
   showBossWall(_hp: number, maxHp: number, worldZ: number): void {
     this.hideBossWall()
-    this.bossWallZ = worldZ
 
     const wallMat = new MeshLambertMaterial({ color: 0x222266 })
     this.bossWallMesh = new Mesh(new BoxGeometry(this.TRACK_W, 4, 0.6), wallMat)

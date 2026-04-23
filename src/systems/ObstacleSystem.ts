@@ -4,7 +4,6 @@
  * Fully wired in M5.
  */
 
-import { BALANCING } from '../data/balancing'
 import { randomFloat, randomInt } from '../utils/helpers'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
