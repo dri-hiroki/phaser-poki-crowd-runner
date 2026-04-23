@@ -59,6 +59,7 @@ export interface ICrowdRenderer {
   getWorldZ(): number
   setViewport(yOffsetFactor: number, heightFactor: number): void
   update(dt: number): void
+  resize(width: number, height: number): void
   destroy(): void
 }
 
@@ -462,9 +463,26 @@ export class ThreeRenderer implements ICrowdRenderer {
 
     // Update aspect ratio so scaling is undistorted
     this.camera.aspect = vw / vh
+
+    // Adaptive FOV to prevent horizontal shrinkage in landscape
+    const defaultFov = 60
+    if (this.camera.aspect > 1.0) {
+      // Scale FOV moderately inversely proportional to square root of aspect
+      this.camera.fov = defaultFov / Math.pow(this.camera.aspect, 0.4)
+    } else {
+      // Normal portrait FOV
+      this.camera.fov = defaultFov
+    }
     this.camera.updateProjectionMatrix()
 
     this.renderer.render(this.scene, this.camera)
+  }
+
+  resize(width: number, height: number): void {
+    if (this.renderer) {
+      // Don't set CSS style (since we use 100%), but DO update internal drawing buffer.
+      this.renderer.setSize(width, height, false)
+    }
   }
 
   // ─── Cleanup ─────────────────────────────────────────────────────────────

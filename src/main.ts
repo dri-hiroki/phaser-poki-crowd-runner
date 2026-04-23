@@ -14,7 +14,6 @@ import { MenuScreen } from './screens/MenuScreen'
 import { GameScreen } from './screens/GameScreen'
 import { ResultScreen } from './screens/ResultScreen'
 import { ScaleManager } from './core/ScaleManager'
-import { GAME_CONFIG } from './data/gameConfig'
 
 async function init() {
   const container = document.getElementById('game-container')!
@@ -22,8 +21,7 @@ async function init() {
   // ── PixiJS (HUD + screens layer) ──────────────────────────────────────────
   const app = new PIXI.Application()
   await app.init({
-    width: GAME_CONFIG.width,
-    height: GAME_CONFIG.height,
+    resizeTo: window,
     backgroundAlpha: 0,          // transparent — Three.js shows through
     antialias: false,
     resolution: window.devicePixelRatio || 1,

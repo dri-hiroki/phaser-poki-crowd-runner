@@ -10,6 +10,7 @@ import { GAME_CONFIG } from '../data/gameConfig'
 import { AssetRegistry } from '../core/Assets'
 
 export class PreloadScreen extends Screen {
+  private title!: PIXI.Text
   private progressBar!: ProgressBar
   private loadingText!: PIXI.Text
   private percentText!: PIXI.Text
@@ -21,6 +22,10 @@ export class PreloadScreen extends Screen {
   async enter() {
     this.createLoadingUI()
     
+    // Trigger initial layout
+    if (this.app?.screen) {
+      this.resize(this.app.screen.width, this.app.screen.height)
+    }
     // Simulate loading external assets or generating textures
     await AssetRegistry.generatePlaceholderTextures(this.app)
 
@@ -45,27 +50,21 @@ export class PreloadScreen extends Screen {
   }
 
   private createLoadingUI() {
-    const cx = GAME_CONFIG.width / 2
-    const cy = GAME_CONFIG.height / 2
-
     const titleStyle = new PIXI.TextStyle({ fill: 0xffffff, fontSize: 32, fontFamily: 'Arial', fontWeight: 'bold' })
-    const title = new PIXI.Text({ text: GAME_CONFIG.title, style: titleStyle })
-    title.anchor.set(0.5)
-    title.position.set(cx, cy - 100)
+    this.title = new PIXI.Text({ text: GAME_CONFIG.title, style: titleStyle })
+    this.title.anchor.set(0.5)
 
     const labelStyle = new PIXI.TextStyle({ fill: 0xaaaacc, fontSize: 18, fontFamily: 'Arial' })
     this.loadingText = new PIXI.Text({ text: 'Loading...', style: labelStyle })
     this.loadingText.anchor.set(0.5)
-    this.loadingText.position.set(cx, cy - 20)
 
-    this.progressBar = new ProgressBar({ x: cx, y: cy + 20, width: 300, height: 20 })
+    this.progressBar = new ProgressBar({ x: 0, y: 0, width: 300, height: 20 })
 
     const percentStyle = new PIXI.TextStyle({ fill: 0xaaaacc, fontSize: 16, fontFamily: 'Arial' })
     this.percentText = new PIXI.Text({ text: '0%', style: percentStyle })
     this.percentText.anchor.set(0.5)
-    this.percentText.position.set(cx, cy + 60)
 
-    this.addChild(title, this.loadingText, this.progressBar, this.percentText)
+    this.addChild(this.title, this.loadingText, this.progressBar, this.percentText)
   }
 
   async exit() {
@@ -73,5 +72,17 @@ export class PreloadScreen extends Screen {
   }
 
   update(_delta: number) {}
-  resize(_width: number, _height: number) {}
+
+  resize(width: number, height: number) {
+    if (!this.title) return
+
+    const cx = width / 2
+    const cy = height / 2
+
+    this.title.position.set(cx, cy - 100)
+    this.loadingText.position.set(cx, cy - 20)
+    
+    this.progressBar.position.set(cx, cy + 20)
+    this.percentText.position.set(cx, cy + 60)
+  }
 }

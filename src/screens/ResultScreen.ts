@@ -6,7 +6,6 @@
 import * as PIXI from 'pixi.js'
 import { Screen } from '../core/Screen'
 import { UIButton } from '../components/UIButton'
-import { GAME_CONFIG } from '../data/gameConfig'
 import { formatScore } from '../utils/helpers'
 
 interface ResultData {
@@ -16,17 +15,24 @@ interface ResultData {
   victory?: boolean
   crowdCount?: number
 }
-
 export class ResultScreen extends Screen {
   private resultData: ResultData = { score: 0, highScore: 0, isNewHighScore: false }
 
-  private scoreDisplay!: PIXI.Text
   private displayedScore: number = 0
   private targetScore: number = 0
   private scoreIncrement: number = 0
-
-  private banner?: PIXI.Text
   private bannerScaleTime: number = 0
+
+  private bg!: PIXI.Graphics
+  private header!: PIXI.Text
+  private card!: PIXI.Graphics
+  private scoreLabelText!: PIXI.Text
+  private scoreDisplay!: PIXI.Text
+  private banner?: PIXI.Text
+  private best?: PIXI.Text
+  private reviveBtn?: UIButton
+  private restartBtn!: UIButton
+  private menuBtn!: UIButton
 
   constructor(screenManager: any) {
     super(screenManager)
@@ -45,6 +51,10 @@ export class ResultScreen extends Screen {
     this.createScoreDisplay()
     this.createButtons()
 
+    if (this.app?.screen) {
+      this.resize(this.app.screen.width, this.app.screen.height)
+    }
+
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === 'r' || e.key === 'R') this.restartGame()
     }
@@ -60,68 +70,51 @@ export class ResultScreen extends Screen {
   }
 
   private createBackground() {
-    const bg = new PIXI.Graphics()
-    bg.rect(0, 0, GAME_CONFIG.width, GAME_CONFIG.height)
-    bg.fill({ color: 0x1a1a2e })
-    this.addChild(bg)
+    this.bg = new PIXI.Graphics()
+    this.addChild(this.bg)
   }
 
   private createScoreDisplay() {
-    const cx = GAME_CONFIG.width / 2
-    const cy = GAME_CONFIG.height / 2
     const { score, highScore, isNewHighScore, victory } = this.resultData
 
     const headerText = victory ? '🏆 VICTORY!' : 'GAME OVER'
     const headerColor = victory ? '#f1c40f' : '#e74c3c'
     const headerStyle = new PIXI.TextStyle({ fontSize: 42, fontFamily: 'Arial', fill: headerColor, fontWeight: 'bold' })
-    const header = new PIXI.Text({ text: headerText, style: headerStyle })
-    header.anchor.set(0.5)
-    header.position.set(cx, cy - 210)
-    this.addChild(header)
+    this.header = new PIXI.Text({ text: headerText, style: headerStyle })
+    this.header.anchor.set(0.5)
+    this.addChild(this.header)
 
-    const card = new PIXI.Graphics()
-    card.roundRect(cx - 160, cy - 165, 320, 160, 16)
-    card.fill({ color: 0x16213e, alpha: 0.8 })
-    card.stroke({ color: 0x4a90d9, alpha: 0.4, width: 2 })
-    this.addChild(card)
+    this.card = new PIXI.Graphics()
+    this.addChild(this.card)
 
     const labelStyle = new PIXI.TextStyle({ fill: '#aaaacc', fontSize: 16, fontFamily: 'Arial' })
-    const label = new PIXI.Text({ text: 'Score', style: labelStyle })
-    label.anchor.set(0.5)
-    label.position.set(cx, cy - 140)
-    this.addChild(label)
+    this.scoreLabelText = new PIXI.Text({ text: 'Score', style: labelStyle })
+    this.scoreLabelText.anchor.set(0.5)
+    this.addChild(this.scoreLabelText)
 
     const scoreColor = isNewHighScore ? '#f1c40f' : '#ffffff'
     const scoreStyle = new PIXI.TextStyle({ fill: scoreColor, fontSize: 52, fontFamily: 'Arial', fontWeight: 'bold' })
     this.scoreDisplay = new PIXI.Text({ text: formatScore(score), style: scoreStyle })
     this.scoreDisplay.anchor.set(0.5)
-    this.scoreDisplay.position.set(cx, cy - 110)
     this.addChild(this.scoreDisplay)
 
     if (isNewHighScore) {
       const bannerStyle = new PIXI.TextStyle({ fill: '#f1c40f', fontSize: 20, fontFamily: 'Arial', fontWeight: 'bold' })
       this.banner = new PIXI.Text({ text: '🏆 NEW BEST!', style: bannerStyle })
       this.banner.anchor.set(0.5)
-      this.banner.position.set(cx, cy - 55)
       this.addChild(this.banner)
     } else if (highScore > 0) {
       const bestStyle = new PIXI.TextStyle({ fill: '#aaaacc', fontSize: 16, fontFamily: 'Arial' })
-      const best = new PIXI.Text({ text: `Best: ${formatScore(highScore)}`, style: bestStyle })
-      best.anchor.set(0.5)
-      best.position.set(cx, cy - 55)
-      this.addChild(best)
+      this.best = new PIXI.Text({ text: `Best: ${formatScore(highScore)}`, style: bestStyle })
+      this.best.anchor.set(0.5)
+      this.addChild(this.best)
     }
   }
 
   private createButtons() {
-    const cx = GAME_CONFIG.width / 2
-    const cy = GAME_CONFIG.height / 2
-
-    // ── Revive (Poki rewarded ad) ──────────────────────────────────────────
     if (!this.resultData.victory && window.PokiSDK) {
-      const reviveBtn = new UIButton({
-        x: cx,
-        y: cy + 20,
+      this.reviveBtn = new UIButton({
+        x: 0, y: 0,
         width: 260,
         height: 60,
         label: '📺 REVIVE (Watch Ad)',
@@ -131,14 +124,11 @@ export class ResultScreen extends Screen {
         pressColor: 0xd35400,
         onClick: () => this.handleRevive()
       })
-      this.addChild(reviveBtn)
+      this.addChild(this.reviveBtn)
     }
 
-    const retryOffset = (!this.resultData.victory && window.PokiSDK) ? 100 : 30
-
-    const restartBtn = new UIButton({
-      x: cx,
-      y: cy + retryOffset,
+    this.restartBtn = new UIButton({
+      x: 0, y: 0,
       width: 240,
       height: 64,
       label: 'PLAY AGAIN',
@@ -148,11 +138,10 @@ export class ResultScreen extends Screen {
       pressColor: 0x357abd,
       onClick: () => this.restartGame()
     })
-    this.addChild(restartBtn)
+    this.addChild(this.restartBtn)
 
-    const menuBtn = new UIButton({
-      x: cx,
-      y: cy + retryOffset + 80,
+    this.menuBtn = new UIButton({
+      x: 0, y: 0,
       width: 200,
       height: 52,
       label: 'MENU',
@@ -162,7 +151,7 @@ export class ResultScreen extends Screen {
       pressColor: 0x1a252f,
       onClick: () => this.goToMenu()
     })
-    this.addChild(menuBtn)
+    this.addChild(this.menuBtn)
   }
 
   private async handleRevive() {
@@ -190,6 +179,8 @@ export class ResultScreen extends Screen {
   async exit() {
     this.removeChildren()
     this.banner = undefined
+    this.best = undefined
+    this.reviveBtn = undefined
   }
 
   update(delta: number) {
@@ -206,5 +197,33 @@ export class ResultScreen extends Screen {
     }
   }
 
-  resize(_w: number, _h: number) {}
+  resize(width: number, height: number) {
+    if (!this.bg) return
+
+    const cx = width / 2
+    const cy = height / 2
+
+    this.bg.clear()
+    this.bg.rect(0, 0, width, height)
+    this.bg.fill({ color: 0x1a1a2e })
+
+    this.header.position.set(cx, cy - 210)
+
+    this.card.clear()
+    this.card.roundRect(cx - 160, cy - 165, 320, 160, 16)
+    this.card.fill({ color: 0x16213e, alpha: 0.8 })
+    this.card.stroke({ color: 0x4a90d9, alpha: 0.4, width: 2 })
+
+    this.scoreLabelText.position.set(cx, cy - 140)
+    this.scoreDisplay.position.set(cx, cy - 110)
+
+    if (this.banner) this.banner.position.set(cx, cy - 55)
+    if (this.best) this.best.position.set(cx, cy - 55)
+
+    if (this.reviveBtn) this.reviveBtn.position.set(cx, cy + 20)
+
+    const retryOffset = (!this.resultData.victory && window.PokiSDK) ? 100 : 30
+    this.restartBtn.position.set(cx, cy + retryOffset)
+    this.menuBtn.position.set(cx, cy + retryOffset + 80)
+  }
 }

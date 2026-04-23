@@ -59,6 +59,9 @@ export class GameScreen extends Screen {
   private bossHealthBar!: BossHealthBar
   private muteBtn!: PIXI.Text
   private pauseOverlay!: PIXI.Container
+  private pauseDim!: PIXI.Graphics
+  private pauseHeader!: PIXI.Text
+  private pauseSub!: PIXI.Text
   private scoreText!: PIXI.Text
   private isPaused: boolean = false
   private isGameplayActive: boolean = false
@@ -120,6 +123,11 @@ export class GameScreen extends Screen {
     this._buildPauseOverlay()
     this._setupInput()
 
+    // Trigger initial layout
+    if (this.app?.screen) {
+      this.resize(this.app.screen.width, this.app.screen.height)
+    }
+
     // Initial crowd render
     this.three.setCrowdCount(this.crowd.count, this.crowd.getFormationPositions())
     this.crowdCounter.update(this.crowd.count, 0)
@@ -155,10 +163,8 @@ export class GameScreen extends Screen {
   // ─── HUD ──────────────────────────────────────────────────────────────────
 
   private _buildHUD(): void {
-    const cx = GAME_CONFIG.width / 2
-
     // Crowd counter — top centre
-    this.crowdCounter = new CrowdCounter(cx, 55)
+    this.crowdCounter = new CrowdCounter(0, 55)
     this.addChild(this.crowdCounter)
 
     // Score — top left
@@ -170,7 +176,6 @@ export class GameScreen extends Screen {
     // Mute icon — top right
     const muteStyle = new PIXI.TextStyle({ fontSize: 24 })
     this.muteBtn = new PIXI.Text({ text: AudioManager.muted ? '🔇' : '🔊', style: muteStyle })
-    this.muteBtn.position.set(GAME_CONFIG.width - 44, 12)
     this.muteBtn.eventMode = 'static'
     this.muteBtn.cursor = 'pointer'
     this.muteBtn.on('pointerdown', () => {
@@ -180,7 +185,7 @@ export class GameScreen extends Screen {
     this.addChild(this.muteBtn)
 
     // Boss health bar — bottom centre, hidden until boss phase
-    this.bossHealthBar = new BossHealthBar(cx, GAME_CONFIG.height - 70, 300)
+    this.bossHealthBar = new BossHealthBar(0, 0, 300)
     this.addChild(this.bossHealthBar)
   }
 
@@ -188,25 +193,18 @@ export class GameScreen extends Screen {
     this.pauseOverlay = new PIXI.Container()
     this.pauseOverlay.visible = false
 
-    const dim = new PIXI.Graphics()
-    dim.rect(0, 0, GAME_CONFIG.width, GAME_CONFIG.height)
-    dim.fill({ color: 0x000000, alpha: 0.65 })
-    this.pauseOverlay.addChild(dim)
-
-    const cx = GAME_CONFIG.width / 2
-    const cy = GAME_CONFIG.height / 2
+    this.pauseDim = new PIXI.Graphics()
+    this.pauseOverlay.addChild(this.pauseDim)
 
     const pStyle = new PIXI.TextStyle({ fontSize: 44, fill: '#ffffff', fontWeight: 'bold', fontFamily: 'Arial' })
-    const pText = new PIXI.Text({ text: 'PAUSED', style: pStyle })
-    pText.anchor.set(0.5)
-    pText.position.set(cx, cy - 30)
-    this.pauseOverlay.addChild(pText)
+    this.pauseHeader = new PIXI.Text({ text: 'PAUSED', style: pStyle })
+    this.pauseHeader.anchor.set(0.5)
+    this.pauseOverlay.addChild(this.pauseHeader)
 
     const rStyle = new PIXI.TextStyle({ fontSize: 18, fill: '#aaaacc', fontFamily: 'Arial' })
-    const rText = new PIXI.Text({ text: 'Press Escape to resume', style: rStyle })
-    rText.anchor.set(0.5)
-    rText.position.set(cx, cy + 30)
-    this.pauseOverlay.addChild(rText)
+    this.pauseSub = new PIXI.Text({ text: 'Press Escape to resume', style: rStyle })
+    this.pauseSub.anchor.set(0.5)
+    this.pauseOverlay.addChild(this.pauseSub)
 
     this.addChild(this.pauseOverlay)
   }
@@ -401,9 +399,8 @@ export class GameScreen extends Screen {
 
     // Touch / mouse drag
     if (this.pointerDown && dx === 0) {
-      const screenW = GAME_CONFIG.width
-      // Map screen pixel delta to world units
-      dx = (this.pointerDeltaX / screenW) * steerSpeed * 12
+      // Map screen pixel delta to world units based on active dimension
+      dx = (this.pointerDeltaX / window.innerWidth) * steerSpeed * 12
       this.pointerDeltaX = 0  // consume delta each frame
     }
 
@@ -541,5 +538,28 @@ export class GameScreen extends Screen {
     this.obstacleSystem.clear()
   }
 
-  resize(_w: number, _h: number): void {}
+  resize(width: number, height: number): void {
+    if (!this.crowdCounter) return
+
+    const cx = width / 2
+    const cy = height / 2
+
+    // Propagate dimension changes to 3D renderer buffer
+    if (this.three) {
+      this.three.resize(width, height)
+    }
+
+    // Positioning
+    this.crowdCounter.position.set(cx, 55)
+    this.muteBtn.position.set(width - 44, 12)
+    this.bossHealthBar.position.set(cx, height - 70)
+
+    // Redraw Pause Overlay Background
+    this.pauseDim.clear()
+    this.pauseDim.rect(0, 0, width, height)
+    this.pauseDim.fill({ color: 0x000000, alpha: 0.65 })
+
+    this.pauseHeader.position.set(cx, cy - 30)
+    this.pauseSub.position.set(cx, cy + 30)
+  }
 }
