@@ -21,6 +21,7 @@ export class MenuScreen extends Screen {
     this.createBackground()
     this.createTitle()
     this.createButtons()
+    this.createFooter()
 
     // Key handlers
     const onKeyUp = (e: KeyboardEvent) => {
