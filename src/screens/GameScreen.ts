@@ -73,7 +73,7 @@ export class GameScreen extends Screen {
 
   // ─── enter ────────────────────────────────────────────────────────────────
 
-  async enter(data?: { revive?: boolean; crowdCount?: number }) {
+  async enter(data?: { revive?: boolean; crowdCount?: number; preview?: boolean }) {
     // Run math self-tests in dev
     if (window.location.hostname === 'localhost') {
       runMathGateSelfTests()
