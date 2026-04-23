@@ -4,7 +4,7 @@
  * Adjust here without touching system or scene code.
  *
  * Contains both the original starter values (kept for compatibility)
- * and the Crowd Runner 3D additions.
+ * Cluster Run additions.
  */
 
 export const BALANCING = {
@@ -49,7 +49,7 @@ export const BALANCING = {
   bootDelay: 100,
 
   // =========================================================================
-  // ─── Crowd Runner 3D ─────────────────────────────────────────────────────
+  // ─── Cluster Run ─────────────────────────────────────────────────────
   // =========================================================================
 
   /** Crowd count hard limits */

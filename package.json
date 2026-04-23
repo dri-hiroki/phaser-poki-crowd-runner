@@ -1,7 +1,7 @@
 {
-  "name": "crowd-runner-3d",
+  "name": "cluster-run",
   "version": "1.0.0",
-  "description": "Crowd Runner 3D – Math Gates. Endless 3D runner with math gates, crowd mechanics, and Poki SDK.",
+  "description": "Cluster Run – Math Gates. Endless 3D runner with math gates, crowd mechanics, and Poki SDK.",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

@@ -1,6 +1,6 @@
 /**
  * levels.ts
- * Phase definitions for the crowd runner run.
+ * Phase definitions for the cluster run.
  *
  * Phases run on elapsed time:
  *   early  0–20s  — gentle, + gates dominant

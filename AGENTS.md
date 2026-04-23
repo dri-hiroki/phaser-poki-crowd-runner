@@ -1,4 +1,4 @@
-# AGENTS.md - AI Agent Reference for crowd-runner-3d
+# AGENTS.md - AI Agent Reference for cluster-run
 
 > This file is for AI coding agents working in this repository.
 > Treat source code as the authority. README.md contains design intent and some stale Phaser-era claims.
@@ -7,9 +7,9 @@
 
 ## 1. Current Project Snapshot
 
-**What it is now:** A TypeScript/Vite browser game prototype named `crowd-runner-3d`. The runtime uses **PixiJS** for screens/HUD and **Three.js** for the 3D runner world. The code no longer boots Phaser and does not depend on Phaser.
+**What it is now:** A TypeScript/Vite browser game prototype named `cluster-run`. The runtime uses **PixiJS** for screens/HUD and **Three.js** for the 3D runner world. The code no longer boots Phaser and does not depend on Phaser.
 
-**Target gameplay:** Portrait 9:16 crowd runner. The player steers a clone crowd left/right through math gates, avoids obstacles, then damages a boss wall.
+**Target gameplay:** Portrait 9:16 cluster run. The player steers a clone crowd left/right through math gates, avoids obstacles, then damages a boss wall.
 
 **Poki status:** The code declares and calls an optional global `window.PokiSDK`, but this repository does not install `@poki/phaser-3` and `index.html` does not load a Poki SDK script. Poki calls are no-ops unless a host page or future code provides `window.PokiSDK`.
 
@@ -141,7 +141,7 @@ src/data/gameConfig.ts
   Title, logical canvas size, background, version, and legacy Phaser-flavored fields.
 
 src/data/balancing.ts
-  Tunable gameplay constants. Contains both active Crowd Runner constants and legacy starter values.
+  Tunable gameplay constants. Contains both active Cluster Run constants and legacy starter values.
 
 src/data/levels.ts
   Phase definitions: early, mid, late, boss.
@@ -320,7 +320,7 @@ When adding `window` or `document` listeners in screens, remove them on screen r
 
 | File | Tune |
 |---|---|
-| `src/data/balancing.ts` | Active crowd runner constants: crowd caps, track speed, steering, collision radius, obstacle damage, boss HP/damage, scores, gate distributions/ranges/lanes/hit sizes. |
+| `src/data/balancing.ts` | Active cluster run constants: crowd caps, track speed, steering, collision radius, obstacle damage, boss HP/damage, scores, gate distributions/ranges/lanes/hit sizes. |
 | `src/data/levels.ts` | Phase timing, gate intervals, obstacle intervals, `hasGates`. Note: GameScreen currently uses `LevelSystem.trackSpeed`, which reads `BALANCING.SPEED_RAMP`, not `PhaseConfig.speedMultiplier`. |
 | `src/data/gameConfig.ts` | `title`, `width`, `height`, `backgroundColor`, `version`. `debug`, `physics`, and `targetFps` are present but not wired into a Phaser runtime. |
 

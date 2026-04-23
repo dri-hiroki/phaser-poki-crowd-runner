@@ -6,7 +6,7 @@
 
 export const GAME_CONFIG = {
   /** Display name shown in MenuScene title */
-  title: 'Crowd Runner 3D',
+  title: 'Cluster Run',
 
   /** Canvas width in pixels — portrait 9:16 base resolution */
   width: 480,

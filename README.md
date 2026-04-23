@@ -1,4 +1,4 @@
-# Crowd Runner 3D — Math Gates
+# Cluster Run — Math Gates
 
 > Un runner 3D endless in cui comandi una folla di clone che cresce e diminuisce passando attraverso **gate matematici** (`+`, `−`, `×`, `÷`). Più sei grande, più distruggi ostacoli e accumuli punteggio — ma un errore al gate sbagliato può farti arrivare al boss con un solo clone.
 

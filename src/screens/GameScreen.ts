@@ -1,6 +1,6 @@
 /**
  * GameScreen.ts
- * Crowd Runner 3D main game screen.
+ * Cluster Run main game screen.
  *
  * PixiJS layer: HUD only (crowd count, boss HP bar, mute button, pause overlay).
  * Three.js layer: 3D world (track, crowd, gates, obstacles, boss wall).
