@@ -57,6 +57,7 @@ export interface ICrowdRenderer {
   updateBossWall(hpFraction: number): void
   hideBossWall(): void
   getWorldZ(): number
+  setViewport(yOffsetFactor: number, heightFactor: number): void
   update(dt: number): void
   destroy(): void
 }
@@ -132,6 +133,10 @@ export class ThreeRenderer implements ICrowdRenderer {
   private shakeTimer: number = 0
   private readonly SHAKE_DUR = 0.25
   private readonly SHAKE_MAG = 0.18
+
+  // Viewport
+  private viewportYOffsetFactor: number = 0
+  private viewportHeightFactor: number = 1
 
   // ─── init ──────────────────────────────────────────────────────────────────
 
@@ -408,6 +413,11 @@ export class ThreeRenderer implements ICrowdRenderer {
 
   getWorldZ(): number { return this.crowdZ }
 
+  setViewport(yOffsetFactor: number, heightFactor: number): void {
+    this.viewportYOffsetFactor = yOffsetFactor
+    this.viewportHeightFactor = heightFactor
+  }
+
   // ─── Main update ─────────────────────────────────────────────────────────
 
   update(dt: number): void {
@@ -435,6 +445,20 @@ export class ThreeRenderer implements ICrowdRenderer {
     this._updateTrack()
     this._updateGates(dtSec)
     this._updateObstacles(dtSec)
+
+    // Apply viewport restriction
+    const w = this.renderer.domElement.width / this.renderer.getPixelRatio()
+    const h = this.renderer.domElement.height / this.renderer.getPixelRatio()
+    
+    // Three.js Y is from bottom
+    const vx = 0
+    const vy = (1 - this.viewportYOffsetFactor - this.viewportHeightFactor) * h
+    const vw = w
+    const vh = h * this.viewportHeightFactor
+
+    this.renderer.setViewport(vx, vy, vw, vh)
+    this.renderer.setScissor(vx, vy, vw, vh)
+    this.renderer.setScissorTest(this.viewportHeightFactor < 1)
 
     this.renderer.render(this.scene, this.camera)
   }

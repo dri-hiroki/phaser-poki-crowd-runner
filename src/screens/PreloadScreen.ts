@@ -38,8 +38,9 @@ export class PreloadScreen extends Screen {
     window.PokiSDK?.gameLoadingFinished()
 
     // Go to next
-    setTimeout(() => {
-      this.screenManager.goTo('MenuScreen')
+    setTimeout(async () => {
+      await this.screenManager.goTo('GameScreen', { preview: true })
+      await this.screenManager.launch('MenuScreen')
     }, 200)
   }
 

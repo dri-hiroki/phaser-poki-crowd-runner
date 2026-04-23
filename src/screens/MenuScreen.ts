@@ -21,7 +21,6 @@ export class MenuScreen extends Screen {
     this.createBackground()
     this.createTitle()
     this.createButtons()
-    this.createFooter()
 
     // Key handlers
     const onKeyUp = (e: KeyboardEvent) => {
@@ -36,27 +35,31 @@ export class MenuScreen extends Screen {
   }
 
   private createBackground() {
+    const menuH = GAME_CONFIG.height * 0.4
     const bg = new PIXI.Graphics()
-    bg.rect(0, 0, GAME_CONFIG.width, GAME_CONFIG.height)
-    bg.fill({ color: 0x1a1a2e })
     
-    // Decorative circles
+    // Top panel
+    bg.rect(0, 0, GAME_CONFIG.width, menuH)
+    bg.fill({ color: 0x1a1a2e, alpha: 0.85 })
+    
+    // Divider
+    bg.rect(0, menuH - 4, GAME_CONFIG.width, 4)
+    bg.fill({ color: 0x4a90d9, alpha: 0.8 })
+
+    // Decorative circle
     const cx = GAME_CONFIG.width / 2
-    bg.circle(cx - 120, 160, 190)
+    bg.circle(cx - 120, 100, 120)
     bg.fill({ color: 0x4a90d9, alpha: 0.06 })
-    
-    bg.circle(cx + 100, GAME_CONFIG.height - 180, 230)
-    bg.fill({ color: 0xe74c3c, alpha: 0.05 })
 
     this.addChild(bg)
   }
 
   private createTitle() {
     const cx = GAME_CONFIG.width / 2
-    const cy = GAME_CONFIG.height / 2
+    const topOffset = 60
 
     const titleStyle = new PIXI.TextStyle({
-      fontSize: 52,
+      fontSize: 48,
       fontFamily: 'Arial, sans-serif',
       fill: '#ffffff',
       fontWeight: 'bold',
@@ -64,27 +67,28 @@ export class MenuScreen extends Screen {
     })
     const title = new PIXI.Text({ text: GAME_CONFIG.title, style: titleStyle })
     title.anchor.set(0.5)
-    title.position.set(cx, cy - 165)
+    title.position.set(cx, topOffset)
     
-    const tagStyle = new PIXI.TextStyle({ fill: 0xaaaacc, fontSize: 20, fontFamily: 'Arial, sans-serif' })
+    const tagStyle = new PIXI.TextStyle({ fill: 0xaaaacc, fontSize: 18, fontFamily: 'Arial, sans-serif' })
     const tag = new PIXI.Text({ text: 'Steer your crowd through the gates!', style: tagStyle })
     tag.anchor.set(0.5)
-    tag.position.set(cx, cy - 100)
+    tag.position.set(cx, topOffset + 60)
 
     this.addChild(title, tag)
   }
 
   private createButtons() {
     const cx = GAME_CONFIG.width / 2
-    const cy = GAME_CONFIG.height / 2
+    const menuH = GAME_CONFIG.height * 0.4
+    const btnY = menuH - 120
 
     const playBtn = new UIButton({
       x: cx,
-      y: cy + 10,
-      width: 240,
-      height: 64,
+      y: btnY,
+      width: 220,
+      height: 54,
       label: 'PLAY',
-      fontSize: 26,
+      fontSize: 24,
       color: 0x4a90d9,
       hoverColor: 0x5ba3f5,
       pressColor: 0x357abd,
@@ -95,11 +99,11 @@ export class MenuScreen extends Screen {
     const muteLabel = AudioManager.muted ? '🔇 Muted' : '🔊 Sound On'
     this.muteButton = new UIButton({
       x: cx,
-      y: cy + 90,
-      width: 180,
-      height: 48,
+      y: btnY + 70,
+      width: 160,
+      height: 40,
       label: muteLabel,
-      fontSize: 18,
+      fontSize: 16,
       color: 0x2c3e50,
       hoverColor: 0x3d5166,
       pressColor: 0x1a252f,
@@ -123,7 +127,11 @@ export class MenuScreen extends Screen {
   }
 
   private startGame() {
-    this.screenManager.goTo('GameScreen')
+    const gameScreen = this.screenManager.getScreen('GameScreen') as any
+    if (gameScreen && typeof gameScreen.startGameplay === 'function') {
+      gameScreen.startGameplay()
+    }
+    this.screenManager.stop('MenuScreen')
   }
 
   private toggleMute() {

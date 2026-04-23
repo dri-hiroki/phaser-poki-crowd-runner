@@ -61,6 +61,7 @@ export class GameScreen extends Screen {
   private pauseOverlay!: PIXI.Container
   private scoreText!: PIXI.Text
   private isPaused: boolean = false
+  private isGameplayActive: boolean = false
 
   // ─── Spawn entries ────────────────────────────────────────────────────────
   private gateSpawnEntry: any = null
@@ -126,10 +127,29 @@ export class GameScreen extends Screen {
     // ── Spawn scheduling ─────────────────────────────────────────────────
     this._startSpawning()
 
-    // ── Poki ─────────────────────────────────────────────────────────────
-    window.PokiSDK?.gameplayStart()
+    // ── Preview mode check ───────────────────────────────────────────────
+    if (data?.preview) {
+      this.isGameplayActive = false
+      this.three.setViewport(0.4, 0.6) // Top 40% empty, bottom 60% game
+      this.crowdCounter.visible = false
+      this.scoreText.visible = false
+    } else {
+      this.isGameplayActive = true
+      window.PokiSDK?.gameplayStart()
+    }
 
     this.gameState = 'running'
+  }
+
+  public startGameplay(): void {
+    if (this.isGameplayActive) return
+    
+    this.isGameplayActive = true
+    this.three.setViewport(0, 1) // Full screen
+    this.crowdCounter.visible = true
+    this.scoreText.visible = true
+    
+    window.PokiSDK?.gameplayStart()
   }
 
   // ─── HUD ──────────────────────────────────────────────────────────────────
@@ -339,13 +359,15 @@ export class GameScreen extends Screen {
     this.three.setCrowdCount(this.crowd.count, this.crowd.getFormationPositions())
 
     // ── Gate collisions ───────────────────────────────────────────────────
-    if (this.gameState === 'running') {
+    if (this.gameState === 'running' && this.isGameplayActive) {
       this._checkGates()
       this._cullEntities()
+    } else if (this.gameState === 'running' && !this.isGameplayActive) {
+      this._cullEntities() // Still cull so they don't pile up
     }
 
     // ── Obstacle collisions ───────────────────────────────────────────────
-    if (this.gameState === 'running') {
+    if (this.gameState === 'running' && this.isGameplayActive) {
       this._checkObstacles()
     }
 
@@ -368,6 +390,8 @@ export class GameScreen extends Screen {
   // ─── Steering ─────────────────────────────────────────────────────────────
 
   private _updateSteering(dtSec: number): void {
+    if (!this.isGameplayActive) return
+
     const steerSpeed = BALANCING.CROWD_STEER_SPEED
     let dx = 0
 

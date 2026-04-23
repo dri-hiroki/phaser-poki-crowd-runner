@@ -2,7 +2,7 @@ import * as PIXI from 'pixi.js'
 import { Screen } from './Screen'
 
 export class ScreenManager {
-  private activeScreen?: Screen
+  private activeScreens: Screen[] = []
   private screens = new Map<string, Screen>()
   public app: PIXI.Application
 
@@ -14,36 +14,72 @@ export class ScreenManager {
     this.screens.set(key, screen)
   }
 
+  /**
+   * Replaces all current screens with the target screen.
+   */
   public async goTo(key: string, data?: any) {
-    if (this.activeScreen) {
-      this.app.stage.removeChild(this.activeScreen)
-      await this.activeScreen.exit()
+    // Clear all existing screens
+    while (this.activeScreens.length > 0) {
+      const screen = this.activeScreens.pop()!
+      this.app.stage.removeChild(screen)
+      await screen.exit()
     }
 
+    await this.launch(key, data)
+  }
+
+  /**
+   * Adds a screen on top of the current stack without removing others.
+   */
+  public async launch(key: string, data?: any) {
     const nextScreen = this.screens.get(key)
     if (!nextScreen) {
       console.warn(`Screen ${key} not found`)
       return
     }
 
-    this.activeScreen = nextScreen
-    this.app.stage.addChild(this.activeScreen)
+    if (this.activeScreens.includes(nextScreen)) {
+      console.warn(`Screen ${key} is already active`)
+      return
+    }
+
+    this.activeScreens.push(nextScreen)
+    this.app.stage.addChild(nextScreen)
     
     // Ensure initial resize
-    this.activeScreen.resize(this.app.screen.width, this.app.screen.height)
+    nextScreen.resize(this.app.screen.width, this.app.screen.height)
     
-    await this.activeScreen.enter(data)
+    await nextScreen.enter(data)
+  }
+
+  /**
+   * Stops and removes a specific active screen.
+   */
+  public async stop(key: string) {
+    const screen = this.screens.get(key)
+    if (!screen) return
+
+    const index = this.activeScreens.indexOf(screen)
+    if (index !== -1) {
+      this.activeScreens.splice(index, 1)
+      this.app.stage.removeChild(screen)
+      await screen.exit()
+    }
+  }
+
+  public getScreen(key: string): Screen | undefined {
+    return this.screens.get(key)
   }
 
   public update(delta: number) {
-    if (this.activeScreen) {
-      this.activeScreen.update(delta)
+    for (const screen of this.activeScreens) {
+      screen.update(delta)
     }
   }
 
   public resize(width: number, height: number) {
-    if (this.activeScreen) {
-      this.activeScreen.resize(width, height)
+    for (const screen of this.activeScreens) {
+      screen.resize(width, height)
     }
   }
 }
