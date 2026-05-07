@@ -25,6 +25,7 @@ import { BALANCING } from '../data/balancing'
 import { clamp } from '../utils/helpers'
 import { runMathGateSelfTests } from '../utils/mathGate'
 import { PokiBridge } from '../lib/poki/PokiBridge'
+import { TutorialOverlay } from '../components/TutorialOverlay'
 
 type GameState = 'idle' | 'running' | 'boss' | 'gameover'
 
@@ -64,6 +65,7 @@ export class GameScreen extends Screen {
   private pauseHeader!: PIXI.Text
   private pauseSub!: PIXI.Text
   private scoreText!: PIXI.Text
+  private tutorialOverlay?: TutorialOverlay
   private isPaused: boolean = false
   private isGameplayActive: boolean = false
 
@@ -144,6 +146,7 @@ export class GameScreen extends Screen {
       this.scoreText.visible = false
     } else {
       this.isGameplayActive = true
+      this._tryShowTutorial()
       PokiBridge.gameplayStart('start')
     }
 
@@ -158,7 +161,18 @@ export class GameScreen extends Screen {
     this.crowdCounter.visible = true
     this.scoreText.visible = true
     
+    this._tryShowTutorial()
     PokiBridge.gameplayStart('start_from_menu')
+  }
+
+  private _tryShowTutorial(): void {
+    if (!TutorialOverlay.hasShownThisSession) {
+      this.tutorialOverlay = new TutorialOverlay()
+      this.addChild(this.tutorialOverlay)
+      if (this.app?.screen) {
+        this.tutorialOverlay.resize(this.app.screen.width, this.app.screen.height)
+      }
+    }
   }
 
   // ─── HUD ──────────────────────────────────────────────────────────────────
@@ -385,6 +399,10 @@ export class GameScreen extends Screen {
     // ── HUD ───────────────────────────────────────────────────────────────
     this.crowdCounter.update(this.crowd.count, deltaMs)
     this.scoreText.text = `Score: ${this.scoreSystem.getScore().toLocaleString()}`
+
+    if (this.tutorialOverlay && !this.tutorialOverlay.isDone()) {
+      this.tutorialOverlay.update(deltaMs)
+    }
   }
 
   // ─── Steering ─────────────────────────────────────────────────────────────
@@ -409,6 +427,9 @@ export class GameScreen extends Screen {
     }
 
     if (velocityX !== 0 || displacementX !== 0) {
+      if (this.tutorialOverlay && !this.tutorialOverlay.isDone()) {
+        this.tutorialOverlay.dismiss()
+      }
       this.crowdWorldX = clamp(
         this.crowdWorldX + (velocityX * dtSec) + displacementX,
         -BALANCING.TRACK_HALF_W,
@@ -567,5 +588,9 @@ export class GameScreen extends Screen {
 
     this.pauseHeader.position.set(cx, cy - 30)
     this.pauseSub.position.set(cx, cy + 30)
+
+    if (this.tutorialOverlay && !this.tutorialOverlay.isDone()) {
+      this.tutorialOverlay.resize(width, height)
+    }
   }
 }

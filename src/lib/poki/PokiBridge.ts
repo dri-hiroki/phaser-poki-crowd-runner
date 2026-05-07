@@ -72,7 +72,7 @@ export class PokiBridge {
   }
 
   private static log(eventName: string, reason?: string, ...args: any[]): void {
-    if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
+    if (window.location.hostname === 'localhost') {
       const msg = reason ? `[${eventName}] ${reason}` : `[${eventName}]`;
       console.info('[PokiSDK]', msg, Date.now(), ...args);
     }

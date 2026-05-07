@@ -29,6 +29,13 @@ export class PreloadScreen extends Screen {
     }
     // Simulate loading external assets or generating textures
     await AssetRegistry.generatePlaceholderTextures(this.app)
+    
+    // Preload logo
+    try {
+      await PIXI.Assets.load('/logo.png')
+    } catch (e) {
+      console.warn('Could not load /logo.png', e)
+    }
 
     // Simulate progress
     for (let i = 0; i <= 10; i++) {
