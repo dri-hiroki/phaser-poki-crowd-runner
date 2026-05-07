@@ -8,6 +8,7 @@ import { Screen } from '../core/Screen'
 import { ProgressBar } from '../components/ProgressBar'
 import { GAME_CONFIG } from '../data/gameConfig'
 import { AssetRegistry } from '../core/Assets'
+import { PokiBridge } from '../lib/poki/PokiBridge'
 
 export class PreloadScreen extends Screen {
   private title!: PIXI.Text
@@ -40,7 +41,7 @@ export class PreloadScreen extends Screen {
     this.loadingText.text = 'Ready!'
 
     // Notify Poki that all assets are loaded
-    window.PokiSDK?.gameLoadingFinished()
+    PokiBridge.gameLoadingFinished()
 
     // Go to next
     setTimeout(async () => {

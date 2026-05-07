@@ -7,6 +7,7 @@ import * as PIXI from 'pixi.js'
 import { Screen } from '../core/Screen'
 import { UIButton } from '../components/UIButton'
 import { formatScore } from '../utils/helpers'
+import { PokiBridge } from '../lib/poki/PokiBridge'
 
 interface ResultData {
   score: number
@@ -156,7 +157,7 @@ export class ResultScreen extends Screen {
 
   private async handleRevive() {
     try {
-      const rewarded = await window.PokiSDK?.rewardedBreak()
+      const rewarded = await PokiBridge.rewardedBreak('revive')
       if (rewarded) {
         this.screenManager.goTo('GameScreen', {
           revive: true,
@@ -168,11 +169,13 @@ export class ResultScreen extends Screen {
     }
   }
 
-  private restartGame() {
+  private async restartGame() {
+    await PokiBridge.commercialBreak('restart')
     this.screenManager.goTo('GameScreen')
   }
 
-  private goToMenu() {
+  private async goToMenu() {
+    await PokiBridge.commercialBreak('menu')
     this.screenManager.goTo('MenuScreen')
   }
 

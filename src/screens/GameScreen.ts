@@ -24,6 +24,7 @@ import { GAME_CONFIG } from '../data/gameConfig'
 import { BALANCING } from '../data/balancing'
 import { clamp } from '../utils/helpers'
 import { runMathGateSelfTests } from '../utils/mathGate'
+import { PokiBridge } from '../lib/poki/PokiBridge'
 
 type GameState = 'idle' | 'running' | 'boss' | 'gameover'
 
@@ -143,7 +144,7 @@ export class GameScreen extends Screen {
       this.scoreText.visible = false
     } else {
       this.isGameplayActive = true
-      window.PokiSDK?.gameplayStart()
+      PokiBridge.gameplayStart('start')
     }
 
     this.gameState = 'running'
@@ -157,7 +158,7 @@ export class GameScreen extends Screen {
     this.crowdCounter.visible = true
     this.scoreText.visible = true
     
-    window.PokiSDK?.gameplayStart()
+    PokiBridge.gameplayStart('start_from_menu')
   }
 
   // ─── HUD ──────────────────────────────────────────────────────────────────
@@ -258,6 +259,7 @@ export class GameScreen extends Screen {
     this.isPaused = !this.isPaused
     this.pauseOverlay.visible = this.isPaused
     this.isPaused ? this.spawnSystem.pause() : this.spawnSystem.resume()
+    this.isPaused ? PokiBridge.gameplayStop('pause') : PokiBridge.gameplayStart('resume')
   }
 
   // ─── Spawning ─────────────────────────────────────────────────────────────
@@ -500,6 +502,8 @@ export class GameScreen extends Screen {
     AudioManager.playSfx(null, 'boss_defeat')
     LevelSystem.incrementRunNumber()
 
+    PokiBridge.gameplayStop('victory')
+
     this._goToResult({ victory: true })
   }
 
@@ -512,7 +516,7 @@ export class GameScreen extends Screen {
 
     // Camera shake then transition
     this.three.triggerShake()
-    window.PokiSDK?.gameplayStop()
+    PokiBridge.gameplayStop('game_over')
 
     setTimeout(() => {
       this._goToResult({ victory: false })

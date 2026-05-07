@@ -14,6 +14,7 @@ import { MenuScreen } from './screens/MenuScreen'
 import { GameScreen } from './screens/GameScreen'
 import { ResultScreen } from './screens/ResultScreen'
 import { ScaleManager } from './core/ScaleManager'
+import { PokiBridge } from './lib/poki/PokiBridge'
 
 async function init() {
   const container = document.getElementById('game-container')!
@@ -48,6 +49,7 @@ async function init() {
   ScaleManager.init(app.canvas, screenManager)
 
   // ── Start ─────────────────────────────────────────────────────────────────
+  await PokiBridge.init()
   screenManager.goTo('BootScreen')
 }
 
