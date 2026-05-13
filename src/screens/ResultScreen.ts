@@ -189,12 +189,18 @@ export class ResultScreen extends Screen {
   }
 
   private async restartGame() {
-    await PokiBridge.commercialBreak('restart')
+    const isLevel1Victory = this.resultData.currentLevel === 1 && this.resultData.victory
+    if (!isLevel1Victory) {
+      await PokiBridge.commercialBreak('restart')
+    }
     this.screenManager.goTo('GameScreen')
   }
 
   private async goToMenu() {
-    await PokiBridge.commercialBreak('menu')
+    const isLevel1Victory = this.resultData.currentLevel === 1 && this.resultData.victory
+    if (!isLevel1Victory) {
+      await PokiBridge.commercialBreak('menu')
+    }
     this.screenManager.goTo('MenuScreen')
   }
 
