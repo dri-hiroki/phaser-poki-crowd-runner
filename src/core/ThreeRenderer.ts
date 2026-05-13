@@ -28,18 +28,22 @@ import {
   Color,
   FogExp2,
   InstancedMesh,
+
   Object3D,
   Vector3,
   PlaneGeometry,
   SphereGeometry,
   CylinderGeometry,
   CanvasTexture,
+  RepeatWrapping,
+  SRGBColorSpace,
   SpriteMaterial,
   Sprite
 } from 'three'
 
 import type { GateSpec } from '../utils/mathGate'
 import type { ObstacleType } from '../systems/ObstacleSystem'
+import type { ThemeConfig } from '../data/themes'
 
 // ─── Public interface ─────────────────────────────────────────────────────────
 
@@ -60,6 +64,11 @@ export interface ICrowdRenderer {
   setViewport(yOffsetFactor: number, heightFactor: number): void
   update(dt: number): void
   resize(width: number, height: number): void
+  setTheme(theme: ThemeConfig): void
+  addCollectible(id: string, worldZ: number, worldX: number): void
+  removeCollectible(id: string): void
+  addFinishLine(worldZ: number): void
+  removeFinishLine(): void
   destroy(): void
 }
 
@@ -139,6 +148,11 @@ export class ThreeRenderer implements ICrowdRenderer {
   private viewportYOffsetFactor: number = 0
   private viewportHeightFactor: number = 1
 
+  // Collectibles and Finish
+  private collectibles = new Map<string, { mesh: Object3D; rotTimer: number }>()
+  private finishLineMesh?: Mesh
+  private themeConfig?: ThemeConfig
+
   // ─── init ──────────────────────────────────────────────────────────────────
 
   init(container: HTMLElement, width: number, height: number): void {
@@ -180,6 +194,24 @@ export class ThreeRenderer implements ICrowdRenderer {
 
     // M0 debug cube proof
     this._buildDebugCube()
+  }
+
+  // ─── Themes ───────────────────────────────────────────────────────────────
+
+  setTheme(theme: ThemeConfig): void {
+    this.themeConfig = theme
+    this.scene.background = new Color(theme.background)
+    if (this.scene.fog instanceof FogExp2) {
+      this.scene.fog.color = new Color(theme.fog)
+    }
+
+    // Update track color
+    const trackCol = new Color(theme.track)
+    for (const seg of this.trackSegments) {
+      if (seg.material instanceof MeshLambertMaterial) {
+        seg.material.color.copy(trackCol)
+      }
+    }
   }
 
   // ─── M0 debug cube ────────────────────────────────────────────────────────
@@ -336,7 +368,8 @@ export class ThreeRenderer implements ICrowdRenderer {
 
     let mesh: Mesh
     if (type === 'rock') {
-      const mat = new MeshLambertMaterial({ color: 0x8e5e3b })
+      const color = this.themeConfig?.obstacles ?? 0x8e5e3b
+      const mat = new MeshLambertMaterial({ color })
       mesh = new Mesh(new SphereGeometry(0.6, 7, 7), mat)
       mesh.position.set(worldX, 0.6, worldZ)
     } else if (type === 'blade') {
@@ -346,7 +379,8 @@ export class ThreeRenderer implements ICrowdRenderer {
       mesh.position.set(worldX, 0.9, worldZ)
     } else {
       // wall — partial barrier
-      const mat = new MeshLambertMaterial({ color: 0xcc4444 })
+      const color = this.themeConfig?.obstacles ?? 0xcc4444
+      const mat = new MeshLambertMaterial({ color })
       mesh = new Mesh(new BoxGeometry(2.5, 2.5, 0.4), mat)
       mesh.position.set(worldX, 1.25, worldZ)
     }
@@ -381,7 +415,8 @@ export class ThreeRenderer implements ICrowdRenderer {
   showBossWall(_hp: number, maxHp: number, worldZ: number): void {
     this.hideBossWall()
 
-    const wallMat = new MeshLambertMaterial({ color: 0x222266 })
+    const color = this.themeConfig?.bossWall ?? 0x222266
+    const wallMat = new MeshLambertMaterial({ color })
     this.bossWallMesh = new Mesh(new BoxGeometry(this.TRACK_W, 4, 0.6), wallMat)
     this.bossWallMesh.position.set(0, 2, worldZ)
     this.scene.add(this.bossWallMesh)
@@ -408,6 +443,64 @@ export class ThreeRenderer implements ICrowdRenderer {
   hideBossWall(): void {
     if (this.bossWallMesh) { this.scene.remove(this.bossWallMesh); this.bossWallMesh = undefined }
     if (this.bossWallHpBar) { this.scene.remove(this.bossWallHpBar); this.bossWallHpBar = undefined }
+  }
+
+  // ─── ICrowdRenderer: Collectibles & Finish ───────────────────────────────
+
+  addCollectible(id: string, worldZ: number, worldX: number): void {
+    if (this.collectibles.has(id)) return
+    const mat = new MeshLambertMaterial({ color: 0xffd700 })
+    const mesh = new Mesh(new CylinderGeometry(0.3, 0.3, 0.1, 16), mat)
+    mesh.rotation.x = Math.PI / 2
+    mesh.position.set(worldX, 0.5, worldZ)
+    this.scene.add(mesh)
+    this.collectibles.set(id, { mesh, rotTimer: 0 })
+  }
+
+  removeCollectible(id: string): void {
+    const entry = this.collectibles.get(id)
+    if (!entry) return
+    this.scene.remove(entry.mesh)
+    this.collectibles.delete(id)
+  }
+
+  private _updateCollectibles(dtSec: number): void {
+    for (const [, entry] of this.collectibles) {
+      entry.mesh.rotation.z += dtSec * 3
+    }
+  }
+
+  addFinishLine(worldZ: number): void {
+    this.removeFinishLine()
+    const texCanvas = document.createElement('canvas')
+    texCanvas.width = 256
+    texCanvas.height = 256
+    const ctx = texCanvas.getContext('2d')!
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, 256, 256)
+    ctx.fillStyle = '#000000'
+    for(let i=0; i<4; i++) {
+      for(let j=0; j<4; j++) {
+        if((i+j)%2 === 0) ctx.fillRect(i*64, j*64, 64, 64)
+      }
+    }
+    const tex = new CanvasTexture(texCanvas)
+    tex.wrapS = RepeatWrapping
+    tex.wrapT = RepeatWrapping
+    tex.colorSpace = SRGBColorSpace
+    tex.needsUpdate = true
+    const mat = new MeshBasicMaterial({ map: tex })
+    this.finishLineMesh = new Mesh(new PlaneGeometry(this.TRACK_W, 2), mat)
+    this.finishLineMesh.rotation.x = -Math.PI / 2
+    this.finishLineMesh.position.set(0, 0.05, worldZ) // slightly above track
+    this.scene.add(this.finishLineMesh)
+  }
+
+  removeFinishLine(): void {
+    if (this.finishLineMesh) {
+      this.scene.remove(this.finishLineMesh)
+      this.finishLineMesh = undefined
+    }
   }
 
   // ─── Accessor ────────────────────────────────────────────────────────────
@@ -446,6 +539,7 @@ export class ThreeRenderer implements ICrowdRenderer {
     this._updateTrack()
     this._updateGates(dtSec)
     this._updateObstacles(dtSec)
+    this._updateCollectibles(dtSec)
 
     // Apply viewport restriction
     const w = this.renderer.domElement.width / this.renderer.getPixelRatio()
@@ -494,5 +588,7 @@ export class ThreeRenderer implements ICrowdRenderer {
     }
     this.gates.clear()
     this.obstacles.clear()
+    this.collectibles.clear()
+    this.removeFinishLine()
   }
 }

@@ -44,10 +44,14 @@ export class ObstacleSystem {
       worldX = randomFloat(-2.5, 2.5)
     }
 
+    return this.spawnAt(cameraZ - 40, worldX, type)
+  }
+
+  spawnAt(worldZ: number, worldX: number, type: ObstacleType): ObstacleEntity {
     const entity: ObstacleEntity = {
       id: `obs_${this.nextId++}`,
       type,
-      worldZ: cameraZ - 40,   // spawn 40 units ahead (Z decreasing = forward)
+      worldZ,
       worldX,
       active: true
     }

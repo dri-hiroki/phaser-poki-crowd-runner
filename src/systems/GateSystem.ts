@@ -35,7 +35,7 @@ export class GateSystem {
    * Spawn a gate pair ahead of the camera.
    * Returns the two entities so caller can pass them to ThreeRenderer.addGate().
    */
-  spawnPair(phase: Phase, crowdCount: number, cameraZ: number): [GateEntity, GateEntity] {
+  spawnPair(phase: Phase, crowdCount: number, worldZ: number): [GateEntity, GateEntity] {
     const [specLeft, specRight] = generateGatePair(phase, crowdCount)
 
     const leftBetter  = isBetterGate(specLeft,  specRight, crowdCount)
@@ -44,12 +44,10 @@ export class GateSystem {
     const leftId  = `gate_${this.nextId++}`
     const rightId = `gate_${this.nextId++}`
 
-    const spawnZ = cameraZ - 38  // ahead in world (Z decreases = forward)
-
     const leftEntity: GateEntity = {
       id: leftId,
       spec: specLeft,
-      worldZ: spawnZ,
+      worldZ,
       worldX: BALANCING.GATE_LANE_X.left,
       passed: false,
       isOptimal: leftBetter
@@ -58,7 +56,7 @@ export class GateSystem {
     const rightEntity: GateEntity = {
       id: rightId,
       spec: specRight,
-      worldZ: spawnZ,
+      worldZ,
       worldX: BALANCING.GATE_LANE_X.right,
       passed: false,
       isOptimal: rightBetter

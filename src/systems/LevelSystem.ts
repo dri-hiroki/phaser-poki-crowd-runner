@@ -5,62 +5,54 @@
  */
 
 import { BALANCING } from '../data/balancing'
-import { getPhaseAt } from '../data/levels'
-import type { Phase, PhaseConfig } from '../data/levels'
 import { SaveManager, SAVE_KEYS } from '../core/SaveManager'
 
 export class LevelSystem {
   private _elapsedMs: number = 0
-  private _currentPhase: Phase = 'early'
   private _bossTriggered: boolean = false
+  private _currentLevel: number = 1
 
   /** Boss wall HP for this run */
   readonly bossHpMax: number
 
   // ─── Callbacks ────────────────────────────────────────────────────────────
 
-  onPhaseChange?: (phase: PhaseConfig) => void
   onBossWallSpawn?: (hp: number, maxHp: number) => void
 
-  constructor() {
-    const runNumber = SaveManager.load<number>(SAVE_KEYS.runNumber, 0)
-    this.bossHpMax = BALANCING.BOSS_BASE_HP + BALANCING.BOSS_HP_PER_RUN * runNumber
+  constructor(level: number) {
+    this._currentLevel = level
+    // Scale boss HP by level
+    this.bossHpMax = BALANCING.BOSS_BASE_HP + BALANCING.BOSS_HP_PER_RUN * level
   }
 
   // ─── Update ────────────────────────────────────────────────────────────────
 
   update(deltaMs: number): void {
     this._elapsedMs += deltaMs
-
-    const elapsedSec = this._elapsedMs / 1000
-    const newPhase = getPhaseAt(elapsedSec)
-
-    if (newPhase.phase !== this._currentPhase) {
-      this._currentPhase = newPhase.phase
-      this.onPhaseChange?.(newPhase)
-
-      if (newPhase.phase === 'boss' && !this._bossTriggered) {
-        this._bossTriggered = true
-        this.onBossWallSpawn?.(this.bossHpMax, this.bossHpMax)
-      }
-    }
   }
 
   // ─── Accessors ────────────────────────────────────────────────────────────
 
-  get currentPhase(): Phase { return this._currentPhase }
-
-  get currentPhaseConfig(): PhaseConfig {
-    return getPhaseAt(this._elapsedMs / 1000)
-  }
+  get currentLevel(): number { return this._currentLevel }
 
   get elapsedSec(): number { return this._elapsedMs / 1000 }
 
   get trackSpeed(): number {
-    return BALANCING.TRACK_SPEED_BASE * BALANCING.SPEED_RAMP[this._currentPhase]
+    // Base speed increases with level
+    const baseSpeed = Math.min(15, BALANCING.TRACK_SPEED_BASE + (this._currentLevel * 0.5))
+    // Speed increases over time within the level (e.g., +1 unit/sec every 5 seconds)
+    const timeBonus = Math.min(6, this._elapsedMs / 5000)
+    
+    return baseSpeed + timeBonus
   }
 
-  isBossPhase(): boolean { return this._currentPhase === 'boss' }
+  isBossPhase(): boolean { return this._bossTriggered }
+  triggerBoss(): void {
+    if (!this._bossTriggered) {
+      this._bossTriggered = true
+      this.onBossWallSpawn?.(this.bossHpMax, this.bossHpMax)
+    }
+  }
 
   // ─── Run number persistence ────────────────────────────────────────────────
 
@@ -70,9 +62,9 @@ export class LevelSystem {
     SaveManager.save(SAVE_KEYS.runNumber, n + 1)
   }
 
-  reset(): void {
+  reset(level: number): void {
     this._elapsedMs = 0
-    this._currentPhase = 'early'
+    this._currentLevel = level
     this._bossTriggered = false
   }
 }

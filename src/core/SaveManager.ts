@@ -88,5 +88,6 @@ export const SAVE_KEYS = {
   sfxVolume: 'sfx_volume',
   musicVolume: 'music_volume',
   /** Incremented each run — used for boss HP scaling */
-  runNumber: 'run_number'
+  runNumber: 'run_number',
+  currentLevel: 'current_level'
 } as const

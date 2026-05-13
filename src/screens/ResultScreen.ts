@@ -8,6 +8,7 @@ import { Screen } from '../core/Screen'
 import { UIButton } from '../components/UIButton'
 import { formatScore } from '../utils/helpers'
 import { PokiBridge } from '../lib/poki/PokiBridge'
+import { getThemeForLevel } from '../data/themes'
 
 interface ResultData {
   score: number
@@ -15,6 +16,7 @@ interface ResultData {
   isNewHighScore: boolean
   victory?: boolean
   crowdCount?: number
+  currentLevel?: number
 }
 export class ResultScreen extends Screen {
   private resultData: ResultData = { score: 0, highScore: 0, isNewHighScore: false }
@@ -34,6 +36,7 @@ export class ResultScreen extends Screen {
   private reviveBtn?: UIButton
   private restartBtn!: UIButton
   private menuBtn!: UIButton
+  private nextPreview?: PIXI.Text
 
   constructor(screenManager: any) {
     super(screenManager)
@@ -45,7 +48,8 @@ export class ResultScreen extends Screen {
       highScore:       data?.highScore      ?? 0,
       isNewHighScore:  data?.isNewHighScore ?? false,
       victory:         data?.victory        ?? false,
-      crowdCount:      data?.crowdCount     ?? 1
+      crowdCount:      data?.crowdCount     ?? 1,
+      currentLevel:    data?.currentLevel   ?? 1
     }
 
     this.createBackground()
@@ -76,9 +80,9 @@ export class ResultScreen extends Screen {
   }
 
   private createScoreDisplay() {
-    const { score, highScore, isNewHighScore, victory } = this.resultData
+    const { score, highScore, isNewHighScore, victory, currentLevel } = this.resultData
 
-    const headerText = victory ? '🏆 VICTORY!' : 'GAME OVER'
+    const headerText = victory ? `LEVEL ${currentLevel ?? 1} CLEARED!` : 'GAME OVER'
     const headerColor = victory ? '#f1c40f' : '#e74c3c'
     const headerStyle = new PIXI.TextStyle({ fontSize: 42, fontFamily: 'Arial', fill: headerColor, fontWeight: 'bold' })
     this.header = new PIXI.Text({ text: headerText, style: headerStyle })
@@ -128,18 +132,33 @@ export class ResultScreen extends Screen {
       this.addChild(this.reviveBtn)
     }
 
+    const isVictory = this.resultData.victory
+    const restartLabel = isVictory ? 'NEXT LEVEL' : 'RETRY LEVEL'
+    const restartColor = isVictory ? 0x27ae60 : 0x4a90d9
+    const restartHover = isVictory ? 0x2ecc71 : 0x5ba3f5
+    const restartPress = isVictory ? 0x1e8449 : 0x357abd
+
     this.restartBtn = new UIButton({
       x: 0, y: 0,
       width: 240,
       height: 64,
-      label: 'PLAY AGAIN',
+      label: restartLabel,
       fontSize: 24,
-      color: 0x4a90d9,
-      hoverColor: 0x5ba3f5,
-      pressColor: 0x357abd,
+      color: restartColor,
+      hoverColor: restartHover,
+      pressColor: restartPress,
       onClick: () => this.restartGame()
     })
     this.addChild(this.restartBtn)
+
+    if (isVictory && this.resultData.currentLevel) {
+      const nextLevel = this.resultData.currentLevel + 1
+      const theme = getThemeForLevel(nextLevel)
+      const previewStyle = new PIXI.TextStyle({ fill: '#aaaacc', fontSize: 18, fontFamily: 'Arial' })
+      this.nextPreview = new PIXI.Text({ text: `Next: Level ${nextLevel} - ${theme.displayName}`, style: previewStyle })
+      this.nextPreview.anchor.set(0.5)
+      this.addChild(this.nextPreview)
+    }
 
     this.menuBtn = new UIButton({
       x: 0, y: 0,
@@ -184,6 +203,7 @@ export class ResultScreen extends Screen {
     this.banner = undefined
     this.best = undefined
     this.reviveBtn = undefined
+    this.nextPreview = undefined
   }
 
   update(delta: number) {
@@ -227,6 +247,8 @@ export class ResultScreen extends Screen {
 
     const retryOffset = (!this.resultData.victory && window.PokiSDK) ? 100 : 30
     this.restartBtn.position.set(cx, cy + retryOffset)
-    this.menuBtn.position.set(cx, cy + retryOffset + 80)
+    if (this.nextPreview) this.nextPreview.position.set(cx, cy + retryOffset + 50)
+    
+    this.menuBtn.position.set(cx, cy + retryOffset + 85)
   }
 }

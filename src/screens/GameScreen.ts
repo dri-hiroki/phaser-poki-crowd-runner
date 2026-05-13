@@ -16,12 +16,14 @@ import { GateSystem } from '../systems/GateSystem'
 import { ObstacleSystem } from '../systems/ObstacleSystem'
 import { LevelSystem } from '../systems/LevelSystem'
 import { ScoreSystem } from '../systems/ScoreSystem'
-import { SpawnSystem } from '../systems/SpawnSystem'
+import { LevelGenerator } from '../systems/LevelGenerator'
 import { AudioManager } from '../core/AudioManager'
 import { CrowdCounter } from '../components/CrowdCounter'
 import { BossHealthBar } from '../components/BossHealthBar'
 import { GAME_CONFIG } from '../data/gameConfig'
 import { BALANCING } from '../data/balancing'
+import { SaveManager, SAVE_KEYS } from '../core/SaveManager'
+import { getThemeForLevel } from '../data/themes'
 import { clamp } from '../utils/helpers'
 import { runMathGateSelfTests } from '../utils/mathGate'
 import { PokiBridge } from '../lib/poki/PokiBridge'
@@ -37,9 +39,11 @@ export class GameScreen extends Screen {
   private obstacleSystem!: ObstacleSystem
   private levelSystem!: LevelSystem
   private scoreSystem!: ScoreSystem
-  private spawnSystem!: SpawnSystem
+  private levelGenerator!: LevelGenerator
 
   // ─── State ────────────────────────────────────────────────────────────────
+  private currentLevel: number = 1
+  private levelSeed: string = 'level_1'
   private gameState: GameState = 'idle'
   private bossHp: number = 0
   private bossHpMax: number = 0
@@ -69,10 +73,6 @@ export class GameScreen extends Screen {
   private isPaused: boolean = false
   private isGameplayActive: boolean = false
 
-  // ─── Spawn entries ────────────────────────────────────────────────────────
-  private gateSpawnEntry: any = null
-  private obstacleSpawnEntry: any = null
-
   constructor(screenManager: any) {
     super(screenManager)
   }
@@ -95,21 +95,20 @@ export class GameScreen extends Screen {
       ? Math.max(1, Math.floor(data.crowdCount * 0.5))
       : 1
 
+    this.currentLevel = SaveManager.load<number>(SAVE_KEYS.currentLevel, 1)
+    // Basic seed string based on level (could be date for daily challenges)
+    this.levelSeed = data?.preview ? 'preview' : `level_${this.currentLevel}`
+
     this.crowd = new CrowdSystem(startCount)
     this.crowd.onCountChange = (n) => this.crowdCounter?.update(n, 0)
 
     this.gateSystem = new GateSystem()
     this.obstacleSystem = new ObstacleSystem()
-    this.levelSystem = new LevelSystem()
+    this.levelSystem = new LevelSystem(this.currentLevel)
     this.scoreSystem = new ScoreSystem()
-    this.spawnSystem = new SpawnSystem()
+    this.levelGenerator = new LevelGenerator(this.currentLevel, this.levelSeed)
 
     // ── Level callbacks ──────────────────────────────────────────────────
-    this.levelSystem.onPhaseChange = (phase) => {
-      this._updateSpawnIntervals()
-      console.log(`[GameScreen] Phase → ${phase.phase}`)
-    }
-
     this.levelSystem.onBossWallSpawn = (hp, maxHp) => {
       this.bossHp = hp
       this.bossHpMax = maxHp
@@ -120,6 +119,11 @@ export class GameScreen extends Screen {
     this.three = new ThreeRenderer()
     const container = document.getElementById('game-container')!
     this.three.init(container, GAME_CONFIG.width, GAME_CONFIG.height)
+    this.three.setTheme(getThemeForLevel(this.currentLevel))
+
+    if (!this.levelGenerator.isBossLevel && !data?.preview) {
+      this.three.addFinishLine(this.levelGenerator.finishZ)
+    }
 
     // ── PixiJS HUD ───────────────────────────────────────────────────────
     this._buildHUD()
@@ -134,9 +138,6 @@ export class GameScreen extends Screen {
     // Initial crowd render
     this.three.setCrowdCount(this.crowd.count, this.crowd.getFormationPositions())
     this.crowdCounter.update(this.crowd.count, 0)
-
-    // ── Spawn scheduling ─────────────────────────────────────────────────
-    this._startSpawning()
 
     // ── Preview mode check ───────────────────────────────────────────────
     if (data?.preview) {
@@ -272,68 +273,13 @@ export class GameScreen extends Screen {
   private _togglePause(): void {
     this.isPaused = !this.isPaused
     this.pauseOverlay.visible = this.isPaused
-    this.isPaused ? this.spawnSystem.pause() : this.spawnSystem.resume()
     this.isPaused ? PokiBridge.gameplayStop('pause') : PokiBridge.gameplayStart('resume')
-  }
-
-  // ─── Spawning ─────────────────────────────────────────────────────────────
-
-  private _startSpawning(): void {
-    const phase = this.levelSystem.currentPhaseConfig
-    const gateIntervalMs = phase.gateIntervalSec.min * 1000
-
-    this.gateSpawnEntry = this.spawnSystem.schedule(
-      () => this._spawnGatePair(),
-      gateIntervalMs,
-      false
-    )
-
-    this.obstacleSpawnEntry = this.spawnSystem.schedule(
-      () => this._spawnObstacle(),
-      phase.obstacleIntervalSec * 1000,
-      false
-    )
-  }
-
-  private _updateSpawnIntervals(): void {
-    const phase = this.levelSystem.currentPhaseConfig
-    if (this.gateSpawnEntry) {
-      this.gateSpawnEntry.intervalMs = phase.hasGates
-        ? phase.gateIntervalSec.min * 1000
-        : Infinity
-    }
-    if (this.obstacleSpawnEntry) {
-      this.obstacleSpawnEntry.intervalMs = phase.obstacleIntervalSec * 1000
-    }
-  }
-
-  private _spawnGatePair(): void {
-    if (this.gameState !== 'running') return
-    if (!this.levelSystem.currentPhaseConfig.hasGates) return
-
-    const [left, right] = this.gateSystem.spawnPair(
-      this.levelSystem.currentPhase,
-      this.crowd.count,
-      this.crowdWorldZ
-    )
-
-    this.three.addGate(left.id,  left.spec,  left.worldZ,  left.worldX)
-    this.three.addGate(right.id, right.spec, right.worldZ, right.worldX)
-  }
-
-  private _spawnObstacle(): void {
-    if (this.gameState !== 'running') return
-    if (this.levelSystem.isBossPhase()) return
-
-    const entity = this.obstacleSystem.spawn(this.crowdWorldZ)
-    this.three.addObstacle(entity.id, entity.type, entity.worldZ, entity.worldX)
   }
 
   // ─── Boss phase ───────────────────────────────────────────────────────────
 
   private _startBossPhase(): void {
     this.gameState = 'boss'
-    this.spawnSystem.pause()
 
     this.bossHp = this.bossHpMax
     this.bossHealthBar.update(this.bossHp, this.bossHpMax)
@@ -359,6 +305,15 @@ export class GameScreen extends Screen {
       const speed = this.levelSystem.trackSpeed
       const metersTravelled = speed * dtSec
       this.scoreSystem.add(Math.floor(metersTravelled * BALANCING.SCORE_PER_METER))
+
+      // Check if we reached the end of the generated level layout
+      if (Math.abs(this.crowdWorldZ) >= this.levelGenerator.levelLength) {
+        if (this.levelGenerator.isBossLevel && !this.levelSystem.isBossPhase()) {
+          this.levelSystem.triggerBoss()
+        } else if (!this.levelGenerator.isBossLevel && this.crowdWorldZ <= this.levelGenerator.finishZ) {
+          this._triggerVictory()
+        }
+      }
     }
 
     // ── World scroll (both running and boss approach) ─────────────────────
@@ -390,8 +345,22 @@ export class GameScreen extends Screen {
       this._updateBoss(dtSec)
     }
 
-    // ── Spawn tick ────────────────────────────────────────────────────────
-    this.spawnSystem.tick(deltaMs)
+    // ── Level generator tick ──────────────────────────────────────────────
+    if (this.gameState === 'running' && this.isGameplayActive) {
+      this.levelGenerator.update(
+        this.crowdWorldZ, 
+        this.crowd.count, 
+        this.crowdWorldX,
+        this.gateSystem, 
+        this.obstacleSystem, 
+        this.three,
+        () => {
+          // onCollect
+          this.scoreSystem.add(1)
+          // AudioManager.playSfx(null, 'coin') // Optional
+        }
+      )
+    }
 
     // ── Three.js render ───────────────────────────────────────────────────
     this.three.update(deltaMs)
@@ -522,6 +491,9 @@ export class GameScreen extends Screen {
     this.three.hideBossWall()
     AudioManager.playSfx(null, 'boss_defeat')
     LevelSystem.incrementRunNumber()
+    
+    // Level up!
+    SaveManager.save(SAVE_KEYS.currentLevel, this.currentLevel + 1)
 
     PokiBridge.gameplayStop('victory')
 
@@ -532,7 +504,6 @@ export class GameScreen extends Screen {
     if (this.gameState === 'gameover') return
     this.gameState = 'gameover'
 
-    this.spawnSystem.clear()
     AudioManager.playSfx(null, 'game_over')
 
     // Camera shake then transition
@@ -550,14 +521,14 @@ export class GameScreen extends Screen {
       highScore: this.scoreSystem.getHighScore(),
       isNewHighScore: this.scoreSystem.isNewHighScore(),
       victory: opts.victory,
-      crowdCount: this.crowd.count
+      crowdCount: this.crowd.count,
+      currentLevel: this.currentLevel
     })
   }
 
   // ─── exit / cleanup ───────────────────────────────────────────────────────
 
   async exit(): Promise<void> {
-    this.spawnSystem.clear()
     this.three.destroy()
     this.removeChildren()
 

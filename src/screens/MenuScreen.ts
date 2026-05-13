@@ -8,7 +8,7 @@ import { Screen } from '../core/Screen'
 import { UIButton } from '../components/UIButton'
 import { AudioManager } from '../core/AudioManager'
 import { SaveManager, SAVE_KEYS } from '../core/SaveManager'
-import { GAME_CONFIG } from '../data/gameConfig'
+
 
 export class MenuScreen extends Screen {
   private muteButton!: UIButton
@@ -52,7 +52,7 @@ export class MenuScreen extends Screen {
   }
 
   private createTitle() {
-    this.title = PIXI.Sprite.from('/logo.png')
+    this.title = PIXI.Sprite.from('./logo.png')
     this.title.anchor.set(0.5)
     
     const tagStyle = new PIXI.TextStyle({ fill: 0xaaaacc, fontSize: 18, fontFamily: 'Arial, sans-serif' })
@@ -124,7 +124,6 @@ export class MenuScreen extends Screen {
     if (!this.bg) return
 
     const cx = width / 2
-    const cy = height / 2
     // 1. Calculate Logo and Tag positions first
     const topOffset = Math.max(40, height * 0.05)
     
