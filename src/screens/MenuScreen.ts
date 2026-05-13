@@ -9,7 +9,6 @@ import { UIButton } from '../components/UIButton'
 import { AudioManager } from '../core/AudioManager'
 import { SaveManager, SAVE_KEYS } from '../core/SaveManager'
 
-
 export class MenuScreen extends Screen {
   private muteButton!: UIButton
   private bg!: PIXI.Graphics
@@ -52,7 +51,7 @@ export class MenuScreen extends Screen {
   }
 
   private createTitle() {
-    this.title = PIXI.Sprite.from('./logo.png')
+    this.title = PIXI.Sprite.from('/logo.png')
     this.title.anchor.set(0.5)
     
     const tagStyle = new PIXI.TextStyle({ fill: 0xaaaacc, fontSize: 18, fontFamily: 'Arial, sans-serif' })
