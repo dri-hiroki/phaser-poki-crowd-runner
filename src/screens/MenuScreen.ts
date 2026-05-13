@@ -51,7 +51,7 @@ export class MenuScreen extends Screen {
   }
 
   private createTitle() {
-    this.title = PIXI.Sprite.from('/logo.png')
+    this.title = PIXI.Sprite.from('logo')
     this.title.anchor.set(0.5)
     
     const tagStyle = new PIXI.TextStyle({ fill: 0xaaaacc, fontSize: 18, fontFamily: 'Arial, sans-serif' })

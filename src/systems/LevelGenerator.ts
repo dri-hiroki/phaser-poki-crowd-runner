@@ -3,7 +3,7 @@ import { CHUNKS, ChunkDef } from '../data/chunks'
 import type { ThreeRenderer } from '../core/ThreeRenderer'
 import type { GateSystem } from './GateSystem'
 import type { ObstacleSystem } from './ObstacleSystem'
-import { BALANCING } from '../data/balancing'
+
 
 export interface PendingEntity {
   id: string
@@ -49,10 +49,12 @@ export class LevelGenerator {
     // Build middle chunks
     while (accumulatedLength < targetLength) {
       // Filter chunks based on difficulty progression
-      const maxDiff = Math.min(10, 1 + Math.floor(level / 2))
+      const maxDiff = Math.min(10, 2 + level)
       const validChunks = CHUNKS.filter(c => c.id !== 'intro_safe' && c.difficulty <= maxDiff)
       
-      const chunk = this.prng.pick(validChunks)
+      // Fallback in case validChunks is empty (shouldn't happen, but good practice)
+      const chunkPool = validChunks.length > 0 ? validChunks : CHUNKS
+      const chunk = this.prng.pick(chunkPool)
       this.appendChunk(chunk, currentZ)
       
       currentZ -= chunk.length
@@ -141,7 +143,7 @@ export class LevelGenerator {
     }
 
     // 2. Check collisions with collectibles
-    const hitRadius = BALANCING.CROWD_COLLISION_RADIUS * Math.min(3, 1 + crowdCount * 0.05)
+    const hitRadius = crowdCount > 0 ? Math.max(0.4, 0.35 + Math.sqrt(crowdCount) * 0.12) : 0.4
     for (let i = this.activeCollectibles.length - 1; i >= 0; i--) {
       const c = this.activeCollectibles[i]
       

@@ -76,7 +76,9 @@ export class ObstacleSystem {
     for (const entity of this.entities) {
       if (!entity.active) continue
 
-      const obstacleHalfW = entity.type === 'wall' ? 1.5 : 0.7
+      let obstacleHalfW = 0.6 // rock
+      if (entity.type === 'wall') obstacleHalfW = 1.25
+      if (entity.type === 'blade') obstacleHalfW = 1.1
       const obstacleHalfD = 0.5
 
       const overlapX = Math.abs(crowdX - entity.worldX) < (crowdRadius + obstacleHalfW)

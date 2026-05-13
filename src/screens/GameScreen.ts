@@ -121,7 +121,7 @@ export class GameScreen extends Screen {
     this.three.init(container, GAME_CONFIG.width, GAME_CONFIG.height)
     this.three.setTheme(getThemeForLevel(this.currentLevel))
 
-    if (!this.levelGenerator.isBossLevel && !data?.preview) {
+    if (!this.levelGenerator.isBossLevel) {
       this.three.addFinishLine(this.levelGenerator.finishZ)
     }
 
@@ -301,7 +301,7 @@ export class GameScreen extends Screen {
     this.levelSystem.update(deltaMs)
 
     // ── Score: distance ───────────────────────────────────────────────────
-    if (this.gameState === 'running') {
+    if (this.gameState === 'running' && this.isGameplayActive) {
       const speed = this.levelSystem.trackSpeed
       const metersTravelled = speed * dtSec
       this.scoreSystem.add(Math.floor(metersTravelled * BALANCING.SCORE_PER_METER))
@@ -448,7 +448,7 @@ export class GameScreen extends Screen {
     const hits = this.obstacleSystem.checkCollisions(
       this.crowdWorldX,
       this.crowdWorldZ,
-      BALANCING.CROWD_COLLISION_RADIUS * Math.min(3, 1 + this.crowd.count * 0.05)
+      this.crowd.getVisualRadius()
     )
 
     for (const obs of hits) {

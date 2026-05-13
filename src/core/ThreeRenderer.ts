@@ -368,7 +368,7 @@ export class ThreeRenderer implements ICrowdRenderer {
 
     let mesh: Mesh
     if (type === 'rock') {
-      const color = this.themeConfig?.obstacles ?? 0x8e5e3b
+      const color = 0xff0000 // Always red as requested
       const mat = new MeshLambertMaterial({ color })
       mesh = new Mesh(new SphereGeometry(0.6, 7, 7), mat)
       mesh.position.set(worldX, 0.6, worldZ)

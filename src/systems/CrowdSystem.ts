@@ -57,6 +57,10 @@ export class CrowdSystem {
 
   get count(): number { return this._count }
 
+  getVisualRadius(): number {
+    return Math.max(0.4, 0.35 + Math.sqrt(this._count) * 0.12)
+  }
+
   isDead(): boolean { return this._count <= 0 }
 
   // ─── Formation ────────────────────────────────────────────────────────────

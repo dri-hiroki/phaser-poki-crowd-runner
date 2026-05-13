@@ -19,6 +19,8 @@ interface ResultData {
   currentLevel?: number
 }
 export class ResultScreen extends Screen {
+  private static sessionVictories = 0
+
   private resultData: ResultData = { score: 0, highScore: 0, isNewHighScore: false }
 
   private displayedScore: number = 0
@@ -50,6 +52,10 @@ export class ResultScreen extends Screen {
       victory:         data?.victory        ?? false,
       crowdCount:      data?.crowdCount     ?? 1,
       currentLevel:    data?.currentLevel   ?? 1
+    }
+
+    if (this.resultData.victory) {
+      ResultScreen.sessionVictories++
     }
 
     this.createBackground()
@@ -189,16 +195,16 @@ export class ResultScreen extends Screen {
   }
 
   private async restartGame() {
-    const isLevel1Victory = this.resultData.currentLevel === 1 && this.resultData.victory
-    if (!isLevel1Victory) {
+    // Only show commercial break if this is not the first victory of the session
+    if (!this.resultData.victory || ResultScreen.sessionVictories > 1) {
       await PokiBridge.commercialBreak('restart')
     }
     this.screenManager.goTo('GameScreen')
   }
 
   private async goToMenu() {
-    const isLevel1Victory = this.resultData.currentLevel === 1 && this.resultData.victory
-    if (!isLevel1Victory) {
+    // Only show commercial break if this is not the first victory of the session
+    if (!this.resultData.victory || ResultScreen.sessionVictories > 1) {
       await PokiBridge.commercialBreak('menu')
     }
     this.screenManager.goTo('MenuScreen')

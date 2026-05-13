@@ -32,9 +32,10 @@ export class PreloadScreen extends Screen {
     
     // Preload logo
     try {
-      await PIXI.Assets.load('./logo.png')
+      PIXI.Assets.add({ alias: 'logo', src: './logo.png' })
+      await PIXI.Assets.load('logo')
     } catch (e) {
-      console.warn('Could not load ./logo.png', e)
+      console.warn('Could not load logo', e)
     }
 
     // Simulate progress
